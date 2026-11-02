@@ -62,7 +62,7 @@ serverJs = replaceExact(serverJs, oldQeCall, newQeCall, 'capture framerate in Q_
 const oldHieFull = `async function hIe(t,e){logger.debug("Generating video with FFmpeg"),logger.debug(t);let{tgaFiles:r,wavFilePath:n,videoFilePath:o}=await hT(t),{ffmpegExecutablePath:i,framerate:s,inputParameters:a,videoCodec:c,audioCodec:l,audioBitrate:u,constantRateFactor:A,outputParameters:d,recordingSystem:f,game:h,sequence:H,outputFolderPath:m,videoContainer:g,recordingOutput:E,recordAudio:_}=t;await pT.default.ensureDir(m);let b=fg(m,H,g);if(f===Br.HLAE&&E===Pr.Video){if(!o)throw logger.error("Video file path is null for HLAE video output"),new Xs;let w=["-y"];a!==""&&w.push(a),w.push(\`-i "\${o}"\`);let O=_&&n;if(O){let te=await Jgt(i,n,l,u,e);w.push(\`-i "\${te}"\`)}return w.push("-c copy","-map 0:v:0"),O&&w.push("-map 1:a:0"),w.push(\`"\${b}"\`),d!==""&&w.push(d),await hg(i,w,e)}let D,$=R_.default.dirname(r[0]);if(f===Br.HLAE)D=R_.default.join($,"%05d.tga");else{let w=On(H);D=R_.default.join($,h===y.Game.CSGO?\`\${w}%04d.tga\`:\`\${w}%08d.tga\`)}let N=["-y",\`-framerate \${s}\`];a!==""&&N.push(a),N.push(\`-i "\${D}"\`);let U=n?await pT.default.pathExists(n):!1,B=_&&U;B&&N.push(\`-i "\${n}"\`),N.push(\`-vcodec \${c}\`),B&&N.push(\`-acodec \${l}\`,\`-b:a \${u}K\`),d!==""?N.push(d):N.push("-pix_fmt yuv420p",\`-crf \${A}\`),N.push(\`"\${b}"\`),await hg(i,N,e)}`;
 
 const newHieAndIntroFull = `function escFfPath(p){return p.replaceAll("\\\\","/").replaceAll(":","\\\\:").replaceAll("'","\\\\'")}
-function writeCleanTxtSync(p,txt){let clean=String(txt??"").replace(/[\\r\\n]/g," ").trim().replaceAll("%","%%");pT.default.writeFileSync(p,clean,{encoding:"utf8"})}
+function writeCleanTxtSync(p,txt){let clean=String(txt??"").replace(/[\\r\\n]/g," ").trim().replaceAll("%","\\\\%");pT.default.writeFileSync(p,clean,{encoding:"utf8"})}
 function getWinFonts(){
   let windir=process.env.WINDIR||"C:\\\\Windows",fdir=R_.default.join(windir,"Fonts");
   let bolds=["segoeuib.ttf","arialbd.ttf","tahomabd.ttf","segoeui.ttf","arial.ttf"],monos=["consolab.ttf","consola.ttf","courbd.ttf","lucon.ttf","segoeuib.ttf"];
@@ -70,7 +70,9 @@ function getWinFonts(){
   for(let c of bolds){let full=R_.default.join(fdir,c);if(pT.default.existsSync(full)){bold=full;break}}
   let mono=bold;
   for(let c of monos){let full=R_.default.join(fdir,c);if(pT.default.existsSync(full)){mono=full;break}}
-  return{boldEsc:escFfPath(bold),monoEsc:escFfPath(mono)};
+  let emoji=R_.default.join(fdir,"seguiemj.ttf");
+  if(!pT.default.existsSync(emoji))emoji=bold;
+  return{boldEsc:escFfPath(bold),monoEsc:escFfPath(mono),emojiEsc:escFfPath(emoji)};
 }
 function getVidCodecArgs(c,A,d,is120Fps=!1){
   let args=[\`-c:v \${c}\`];
@@ -165,7 +167,7 @@ async function generateIntroVideoWithFFmpeg(cfg,signal){
     let colsHdr="#   JOGADOR              K /   D /   A    K/D";
     let ftrTxt="CS DEMO MANAGER CUSTOM  •  KDA TOTAL DOS JOGADORES (INCLUINDO BOTS ASSUMIDOS)";
     let fHdr=wTxt("hdr.txt",hdrTxt),fScore=wTxt("score.txt",scoreTxt),fTaT=wTxt("ta_t.txt",tATitle),fTbT=wTxt("tb_t.txt",tBTitle),fCols=wTxt("cols.txt",colsHdr),fFtr=wTxt("ftr.txt",ftrTxt);
-    let maxRows=Math.max(tAPlayers.length,tBPlayers.length,1),rowFs=maxRows>8?ry(19):ry(21),rowStep=maxRows>8?ry(36):ry(42),rowStartY=ry(486);
+    let maxRows=Math.max(tAPlayers.length,tBPlayers.length,1),rowFs=maxRows>8?ry(20):ry(22),rowStep=maxRows>8?ry(36):ry(42),rowStartY=ry(486);
     let fp=[
       \`scale=\${w}:\${ht}:force_original_aspect_ratio=increase\`,
       \`crop=\${w}:\${ht}\`,
@@ -182,12 +184,12 @@ async function generateIntroVideoWithFFmpeg(cfg,signal){
       \`drawbox=x=\${rx(985)}:y=\${ry(352)}:w=\${rx(815)}:h=\${ry(560)}:color=0x0f172ae0:t=fill\`,
       \`drawbox=x=\${rx(985)}:y=\${ry(352)}:w=\${rx(815)}:h=\${ry(56)}:color=0x7c2d12e0:t=fill\`,
       \`drawbox=x=\${rx(985)}:y=\${ry(352)}:w=\${rx(815)}:h=\${ry(560)}:color=0xf97316@0.7:t=2\`,
-      \`drawtext=fontfile='\${boldEsc}':textfile='\${fHdr}':fontsize=\${ry(34)}:fontcolor=0xfbbf24:x=(w-text_w)/2:y=\${ry(82)}\`,
-      \`drawtext=fontfile='\${boldEsc}':textfile='\${fScore}':fontsize=\${ry(56)}:fontcolor=white:x=(w-text_w)/2:y=\${ry(222)}\`,
-      \`drawtext=fontfile='\${boldEsc}':textfile='\${fTaT}':fontsize=\${ry(25)}:fontcolor=0x93c5fd:x=\${rx(150)}:y=\${ry(368)}\`,
-      \`drawtext=fontfile='\${boldEsc}':textfile='\${fTbT}':fontsize=\${ry(25)}:fontcolor=0xfdba74:x=\${rx(1015)}:y=\${ry(368)}\`,
-      \`drawtext=fontfile='\${monoEsc}':textfile='\${fCols}':fontsize=\${ry(20)}:fontcolor=0x9ca3af:x=\${rx(150)}:y=\${ry(432)}\`,
-      \`drawtext=fontfile='\${monoEsc}':textfile='\${fCols}':fontsize=\${ry(20)}:fontcolor=0x9ca3af:x=\${rx(1015)}:y=\${ry(432)}\`,
+      \`drawtext=fontfile='\${boldEsc}':textfile='\${fHdr}':fontsize=\${ry(36)}:fontcolor=0xfbbf24:x=(w-text_w)/2:y=\${ry(82)}\`,
+      \`drawtext=fontfile='\${boldEsc}':textfile='\${fScore}':fontsize=\${ry(60)}:fontcolor=white:x=(w-text_w)/2:y=\${ry(222)}\`,
+      \`drawtext=fontfile='\${boldEsc}':textfile='\${fTaT}':fontsize=\${ry(27)}:fontcolor=0x93c5fd:x=\${rx(150)}:y=\${ry(368)}\`,
+      \`drawtext=fontfile='\${boldEsc}':textfile='\${fTbT}':fontsize=\${ry(27)}:fontcolor=0xfdba74:x=\${rx(1015)}:y=\${ry(368)}\`,
+      \`drawtext=fontfile='\${monoEsc}':textfile='\${fCols}':fontsize=\${ry(21)}:fontcolor=0x9ca3af:x=\${rx(150)}:y=\${ry(432)}\`,
+      \`drawtext=fontfile='\${monoEsc}':textfile='\${fCols}':fontsize=\${ry(21)}:fontcolor=0x9ca3af:x=\${rx(1015)}:y=\${ry(432)}\`,
       \`drawbox=x=\${rx(145)}:y=\${ry(464)}:w=\${rx(765)}:h=1:color=0x374151@0.9:t=fill\`,
       \`drawbox=x=\${rx(1010)}:y=\${ry(464)}:w=\${rx(765)}:h=1:color=0x374151@0.9:t=fill\`
     ];
@@ -200,7 +202,7 @@ async function generateIntroVideoWithFFmpeg(cfg,signal){
       fp.push(\`drawtext=fontfile='\${monoEsc}':textfile='\${rf}':fontsize=\${rowFs}:fontcolor=\${col}:x=\${rx(1015)}:y=\${yy}\`);
     }
     fp.push(
-      \`drawtext=fontfile='\${boldEsc}':textfile='\${fFtr}':fontsize=\${ry(20)}:fontcolor=0x9ca3af:x=(w-text_w)/2:y=\${ry(965)}\`,
+      \`drawtext=fontfile='\${boldEsc}':textfile='\${fFtr}':fontsize=\${ry(21)}:fontcolor=0x9ca3af:x=(w-text_w)/2:y=\${ry(965)}\`,
       \`fps=\${s}\`,
       \`loop=loop=\${s*INTRO_DUR}:size=1:start=0\`,
       \`trim=duration=\${INTRO_DUR}\`,
@@ -246,7 +248,7 @@ async function generateOutroVideoWithFFmpeg(cfg,signal){
     ];
     let mapImg="";
     for(let cand of mapCands){if(await pT.default.pathExists(cand)){mapImg=cand;break}}
-    let{boldEsc,monoEsc}=getWinFonts();
+    let{boldEsc,monoEsc,emojiEsc}=getWinFonts();
     let w=Math.max(1280,width||1920),ht=Math.max(720,height||1080),sx=w/1920,sy=ht/1080,rx=v=>Math.round(v*sx),ry=v=>Math.round(v*sy);
     let wTxt=(name,txt)=>{let fp=R_.default.join(tmpDir,name);writeCleanTxtSync(fp,txt);return escFfPath(fp)};
     let winBanner="";
@@ -266,23 +268,23 @@ async function generateOutroVideoWithFFmpeg(cfg,signal){
       "eq=brightness=-0.38:saturation=0.8",
       \`drawbox=x=\${rx(120)}:y=\${ry(48)}:w=\${rx(1680)}:h=\${ry(100)}:color=0x0d131fe0:t=fill\`,
       \`drawbox=x=\${rx(120)}:y=\${ry(145)}:w=\${rx(1680)}:h=\${ry(4)}:color=0xf59e0b@0.95:t=fill\`,
-      \`drawtext=fontfile='\${boldEsc}':textfile='\${fBanner}':fontsize=\${ry(34)}:fontcolor=0xfbbf24:x=(w-text_w)/2:y=\${ry(82)}\`,
+      \`drawtext=fontfile='\${boldEsc}':textfile='\${fBanner}':fontsize=\${ry(36)}:fontcolor=0xfbbf24:x=(w-text_w)/2:y=\${ry(82)}\`,
       \`drawbox=x=\${rx(120)}:y=\${ry(180)}:w=\${rx(815)}:h=\${ry(735)}:color=0x0f172ae8:t=fill\`,
       \`drawbox=x=\${rx(120)}:y=\${ry(180)}:w=\${rx(815)}:h=\${ry(58)}:color=0x1e3a8ae0:t=fill\`,
       \`drawbox=x=\${rx(120)}:y=\${ry(180)}:w=\${rx(815)}:h=\${ry(735)}:color=0x3b82f6@0.7:t=2\`,
-      \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpT}':fontsize=\${ry(26)}:fontcolor=0xfbbf24:x=\${rx(160)}:y=\${ry(195)}\`,
-      \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpN}':fontsize=\${ry(38)}:fontcolor=0xfef08a:x=\${rx(160)}:y=\${ry(270)}\`,
-      \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpTm}':fontsize=\${ry(22)}:fontcolor=0x93c5fd:x=\${rx(160)}:y=\${ry(325)}\`,
+      \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpT}':fontsize=\${ry(28)}:fontcolor=0xfbbf24:x=\${rx(160)}:y=\${ry(195)}\`,
+      \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpN}':fontsize=\${ry(42)}:fontcolor=0xfef08a:x=\${rx(160)}:y=\${ry(270)}\`,
+      \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpTm}':fontsize=\${ry(24)}:fontcolor=0x93c5fd:x=\${rx(160)}:y=\${ry(325)}\`,
       \`drawbox=x=\${rx(160)}:y=\${ry(370)}:w=\${rx(735)}:h=1:color=0x374151@0.9:t=fill\`,
-      \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpKda}':fontsize=\${ry(26)}:fontcolor=white:x=\${rx(160)}:y=\${ry(400)}\`,
+      \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpKda}':fontsize=\${ry(28)}:fontcolor=white:x=\${rx(160)}:y=\${ry(400)}\`,
       \`drawbox=x=\${rx(160)}:y=\${ry(455)}:w=\${rx(735)}:h=1:color=0x374151@0.9:t=fill\`,
-      \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpHum}':fontsize=\${ry(23)}:fontcolor=0xe2e8f0:x=\${rx(160)}:y=\${ry(490)}\`,
-      \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpBot}':fontsize=\${ry(23)}:fontcolor=0x94a3b8:x=\${rx(160)}:y=\${ry(550)}\`,
-      \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpHs}':fontsize=\${ry(23)}:fontcolor=0xfbbf24:x=\${rx(160)}:y=\${ry(610)}\`,
+      \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpHum}':fontsize=\${ry(25)}:fontcolor=0xe2e8f0:x=\${rx(160)}:y=\${ry(490)}\`,
+      \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpBot}':fontsize=\${ry(25)}:fontcolor=0x94a3b8:x=\${rx(160)}:y=\${ry(550)}\`,
+      \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpHs}':fontsize=\${ry(25)}:fontcolor=0xfbbf24:x=\${rx(160)}:y=\${ry(610)}\`,
       \`drawbox=x=\${rx(985)}:y=\${ry(180)}:w=\${rx(815)}:h=\${ry(735)}:color=0x0f172ae8:t=fill\`,
       \`drawbox=x=\${rx(985)}:y=\${ry(180)}:w=\${rx(815)}:h=\${ry(58)}:color=0x7c2d12e0:t=fill\`,
       \`drawbox=x=\${rx(985)}:y=\${ry(180)}:w=\${rx(815)}:h=\${ry(735)}:color=0xf97316@0.7:t=2\`,
-      \`drawtext=fontfile='\${boldEsc}':textfile='\${fDestT}':fontsize=\${ry(26)}:fontcolor=0xfbbf24:x=\${rx(1025)}:y=\${ry(195)}\`
+      \`drawtext=fontfile='\${boldEsc}':textfile='\${fDestT}':fontsize=\${ry(28)}:fontcolor=0xfbbf24:x=\${rx(1025)}:y=\${ry(195)}\`
     ];
     if(hasFun){
       if(funAwards.length<=5){
@@ -290,22 +292,22 @@ async function generateOutroVideoWithFFmpeg(cfg,signal){
           let item=funAwards[idx],destY=ry(265)+idx*ry(115);
           let fTrophy=wTxt(\`fa_t_\${idx}.txt\`,\`\${item.trophy} - \${item.playerName}\`),fDesc=wTxt(\`fa_d_\${idx}.txt\`,item.desc);
           fp.push(
-            \`drawtext=fontfile='\${boldEsc}':textfile='\${fTrophy}':fontsize=\${ry(22)}:fontcolor=0xfdba74:x=\${rx(1025)}:y=\${destY}\`,
-            \`drawtext=fontfile='\${monoEsc}':textfile='\${fDesc}':fontsize=\${ry(18)}:fontcolor=white:x=\${rx(1045)}:y=\${destY+ry(36)}\`
+            \`drawtext=fontfile='\${emojiEsc}':textfile='\${fTrophy}':fontsize=\${ry(25)}:fontcolor=0xfdba74:x=\${rx(1025)}:y=\${destY}\`,
+            \`drawtext=fontfile='\${monoEsc}':textfile='\${fDesc}':fontsize=\${ry(20)}:fontcolor=white:x=\${rx(1045)}:y=\${destY+ry(38)}\`
           );
           if(idx<funAwards.length-1)fp.push(\`drawbox=x=\${rx(1025)}:y=\${destY+ry(85)}:w=\${rx(735)}:h=1:color=0x374151@0.7:t=fill\`);
         }
       }else{
         for(let idx=0;idx<Math.min(10,funAwards.length);idx++){
           let item=funAwards[idx],col=Math.floor(idx/5),row=idx%5;
-          let colX=col===0?rx(1015):rx(1405),rowY=ry(265)+row*ry(115);
+          let colX=col===0?rx(1015):rx(1410),rowY=ry(265)+row*ry(118);
           let fBadge=wTxt(\`fa_b_\${idx}.txt\`,item.badge),fName=wTxt(\`fa_n_\${idx}.txt\`,item.playerName),fDesc=wTxt(\`fa_d_\${idx}.txt\`,item.desc);
           fp.push(
-            \`drawtext=fontfile='\${boldEsc}':textfile='\${fBadge}':fontsize=\${ry(18)}:fontcolor=0xfdba74:x=\${colX}:y=\${rowY}\`,
-            \`drawtext=fontfile='\${boldEsc}':textfile='\${fName}':fontsize=\${ry(17)}:fontcolor=0xfef08a:x=\${colX}:y=\${rowY+ry(28)}\`,
-            \`drawtext=fontfile='\${monoEsc}':textfile='\${fDesc}':fontsize=\${ry(14)}:fontcolor=white:x=\${colX}:y=\${rowY+ry(54)}\`
+            \`drawtext=fontfile='\${emojiEsc}':textfile='\${fBadge}':fontsize=\${ry(21)}:fontcolor=0xfdba74:x=\${colX}:y=\${rowY}\`,
+            \`drawtext=fontfile='\${boldEsc}':textfile='\${fName}':fontsize=\${ry(20)}:fontcolor=0xfef08a:x=\${colX}:y=\${rowY+ry(30)}\`,
+            \`drawtext=fontfile='\${monoEsc}':textfile='\${fDesc}':fontsize=\${ry(16)}:fontcolor=white:x=\${colX}:y=\${rowY+ry(58)}\`
           );
-          if(row<4&&idx+1<funAwards.length)fp.push(\`drawbox=x=\${colX}:y=\${rowY+ry(92)}:w=\${rx(365)}:h=1:color=0x374151@0.5:t=fill\`);
+          if(row<4&&idx+1<funAwards.length)fp.push(\`drawbox=x=\${colX}:y=\${rowY+ry(98)}:w=\${rx(365)}:h=1:color=0x374151@0.5:t=fill\`);
         }
       }
     }else{
@@ -313,15 +315,15 @@ async function generateOutroVideoWithFFmpeg(cfg,signal){
       for(let idx=0;idx<dItems.length;idx++){
         let it=dItems[idx],fLbl=wTxt(\`hl_lbl_\${idx}.txt\`,it.label),fVal=wTxt(\`hl_val_\${idx}.txt\`,it.value);
         fp.push(
-          \`drawtext=fontfile='\${boldEsc}':textfile='\${fLbl}':fontsize=\${ry(23)}:fontcolor=0xfdba74:x=\${rx(1025)}:y=\${destY}\`,
-          \`drawtext=fontfile='\${monoEsc}':textfile='\${fVal}':fontsize=\${ry(21)}:fontcolor=white:x=\${rx(1045)}:y=\${destY+ry(36)}\`
+          \`drawtext=fontfile='\${boldEsc}':textfile='\${fLbl}':fontsize=\${ry(26)}:fontcolor=0xfdba74:x=\${rx(1025)}:y=\${destY}\`,
+          \`drawtext=fontfile='\${monoEsc}':textfile='\${fVal}':fontsize=\${ry(23)}:fontcolor=white:x=\${rx(1045)}:y=\${destY+ry(36)}\`
         );
         destY+=ry(96);
         if(idx<dItems.length-1)fp.push(\`drawbox=x=\${rx(1025)}:y=\${destY-ry(20)}:w=\${rx(735)}:h=1:color=0x374151@0.7:t=fill\`);
       }
     }
     fp.push(
-      \`drawtext=fontfile='\${boldEsc}':textfile='\${fFtr}':fontsize=\${ry(20)}:fontcolor=0x9ca3af:x=(w-text_w)/2:y=\${ry(965)}\`,
+      \`drawtext=fontfile='\${boldEsc}':textfile='\${fFtr}':fontsize=\${ry(22)}:fontcolor=0x9ca3af:x=(w-text_w)/2:y=\${ry(965)}\`,
       \`fps=\${s}\`,
       \`loop=loop=\${s*OUTRO_DUR}:size=1:start=0\`,
       \`trim=duration=\${OUTRO_DUR}\`,
@@ -437,12 +439,23 @@ async function hIe(t,e){
   try{
     let hudVf=await buildHud();
     if(hasSlow&&slowMo){
-      let s1=slowMo.startSec.toFixed(3),s2=slowMo.endSec.toFixed(3),dur=rawSeqDur.toFixed(3);
-      let vBase=[\`[0:v]trim=0:\${s1},setpts=PTS-STARTPTS[vpre]\`,\`[0:v]trim=\${s1}:\${s2},setpts=2.0*(PTS-STARTPTS)[vslow]\`,\`[0:v]trim=\${s2}:\${dur},setpts=PTS-STARTPTS[vpost]\`,\`[vpre][vslow][vpost]concat=n=3:v=1:a=0[vcat]\`];
+      let s1=slowMo.startSec.toFixed(3),s2=slowMo.endSec.toFixed(3);
+      let slowPtsExpr=(s>=100)?\`setpts=N/(\${tfps}*TB),fps=fps=\${tfps}:round=near\`:\`setpts=2.0*(PTS-STARTPTS),fps=fps=\${tfps}:round=near\`;
+      let vBase=[
+        \`[0:v]trim=start=0:end=\${s1},setpts=PTS-STARTPTS,fps=fps=\${tfps}:round=near[vpre]\`,
+        \`[0:v]trim=start=\${s1}:end=\${s2},\${slowPtsExpr}[vslow]\`,
+        \`[0:v]trim=start=\${s2},setpts=PTS-STARTPTS,fps=fps=\${tfps}:round=near[vpost]\`,
+        \`[vpre][vslow][vpost]concat=n=3:v=1:a=0[vcat]\`
+      ];
       let vOut=["setsar=1:1",...hudVf];
       if(enTrans)vOut.push(\`fade=t=in:st=0:d=\${fadeDur.toFixed(2)}\`,\`fade=t=out:st=\${fadeOutSt.toFixed(2)}:d=\${fadeDur.toFixed(2)}\`);
-      vOut.push(\`fps=fps=\${tfps}\`,"format=yuv420p");
-      let aBase=[\`[1:a]atrim=0:\${s1},asetpts=PTS-STARTPTS[apre]\`,\`[1:a]atrim=\${s1}:\${s2},asetpts=PTS-STARTPTS,atempo=0.5[aslow]\`,\`[1:a]atrim=\${s2}:\${dur},asetpts=PTS-STARTPTS[apost]\`,\`[apre][aslow][apost]concat=n=3:v=0:a=1[acat]\`];
+      vOut.push(\`fps=fps=\${tfps}:round=near\`,"format=yuv420p");
+      let aBase=[
+        \`[1:a]atrim=start=0:end=\${s1},asetpts=PTS-STARTPTS[apre]\`,
+        \`[1:a]atrim=start=\${s1}:end=\${s2},asetpts=PTS-STARTPTS,atempo=0.5[aslow]\`,
+        \`[1:a]atrim=start=\${s2},asetpts=PTS-STARTPTS[apost]\`,
+        \`[apre][aslow][apost]concat=n=3:v=0:a=1[acat]\`
+      ];
       let aOut=["aresample=async=1:first_pts=0"];
       if(enTrans)aOut.push(\`afade=t=in:st=0:d=\${fadeDur.toFixed(2)}\`,\`afade=t=out:st=\${fadeOutSt.toFixed(2)}:d=\${fadeDur.toFixed(2)}\`);
       let fullComp=[...vBase,\`[vcat]\${vOut.join(",")}[vout]\`,...aBase,\`[acat]\${aOut.join(",")}[aout]\`].join(";\\n");
@@ -465,7 +478,7 @@ async function hIe(t,e){
     }
     let vf=["setsar=1:1",...hudVf];
     if(enTrans)vf.push(\`fade=t=in:st=0:d=\${fadeDur.toFixed(2)}\`,\`fade=t=out:st=\${fadeOutSt.toFixed(2)}:d=\${fadeDur.toFixed(2)}\`);
-    vf.push(\`fps=fps=\${tfps}\`,"format=yuv420p");
+    vf.push(\`fps=fps=\${tfps}:round=near\`,"format=yuv420p");
     let fScript=R_.default.join(tmpHudDir,\`filter_seq_\${H.number}.txt\`);
     await pT.default.writeFile(fScript,vf.join(","),"utf8");
     let afFilter=enTrans?\`aresample=async=1:first_pts=0,afade=t=in:st=0:d=\${fadeDur.toFixed(2)},afade=t=out:st=\${fadeOutSt.toFixed(2)}:d=\${fadeDur.toFixed(2)}\`:"aresample=async=1:first_pts=0";

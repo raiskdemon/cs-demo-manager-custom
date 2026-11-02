@@ -439,12 +439,23 @@ async function hIe(t,e){
   try{
     let hudVf=await buildHud();
     if(hasSlow&&slowMo){
-      let s1=slowMo.startSec.toFixed(3),s2=slowMo.endSec.toFixed(3),dur=rawSeqDur.toFixed(3);
-      let vBase=[\`[0:v]trim=0:\${s1},setpts=PTS-STARTPTS[vpre]\`,\`[0:v]trim=\${s1}:\${s2},setpts=2.0*(PTS-STARTPTS)[vslow]\`,\`[0:v]trim=\${s2}:\${dur},setpts=PTS-STARTPTS[vpost]\`,\`[vpre][vslow][vpost]concat=n=3:v=1:a=0[vcat]\`];
+      let s1=slowMo.startSec.toFixed(3),s2=slowMo.endSec.toFixed(3);
+      let slowPtsExpr=(s>=100)?\`setpts=N/(\${tfps}*TB),fps=fps=\${tfps}:round=near\`:\`setpts=2.0*(PTS-STARTPTS),fps=fps=\${tfps}:round=near\`;
+      let vBase=[
+        \`[0:v]trim=start=0:end=\${s1},setpts=PTS-STARTPTS,fps=fps=\${tfps}:round=near[vpre]\`,
+        \`[0:v]trim=start=\${s1}:end=\${s2},\${slowPtsExpr}[vslow]\`,
+        \`[0:v]trim=start=\${s2},setpts=PTS-STARTPTS,fps=fps=\${tfps}:round=near[vpost]\`,
+        \`[vpre][vslow][vpost]concat=n=3:v=1:a=0[vcat]\`
+      ];
       let vOut=["setsar=1:1",...hudVf];
       if(enTrans)vOut.push(\`fade=t=in:st=0:d=\${fadeDur.toFixed(2)}\`,\`fade=t=out:st=\${fadeOutSt.toFixed(2)}:d=\${fadeDur.toFixed(2)}\`);
-      vOut.push(\`fps=fps=\${tfps}\`,"format=yuv420p");
-      let aBase=[\`[1:a]atrim=0:\${s1},asetpts=PTS-STARTPTS[apre]\`,\`[1:a]atrim=\${s1}:\${s2},asetpts=PTS-STARTPTS,atempo=0.5[aslow]\`,\`[1:a]atrim=\${s2}:\${dur},asetpts=PTS-STARTPTS[apost]\`,\`[apre][aslow][apost]concat=n=3:v=0:a=1[acat]\`];
+      vOut.push(\`fps=fps=\${tfps}:round=near\`,"format=yuv420p");
+      let aBase=[
+        \`[1:a]atrim=start=0:end=\${s1},asetpts=PTS-STARTPTS[apre]\`,
+        \`[1:a]atrim=start=\${s1}:end=\${s2},asetpts=PTS-STARTPTS,atempo=0.5[aslow]\`,
+        \`[1:a]atrim=start=\${s2},asetpts=PTS-STARTPTS[apost]\`,
+        \`[apre][aslow][apost]concat=n=3:v=0:a=1[acat]\`
+      ];
       let aOut=["aresample=async=1:first_pts=0"];
       if(enTrans)aOut.push(\`afade=t=in:st=0:d=\${fadeDur.toFixed(2)}\`,\`afade=t=out:st=\${fadeOutSt.toFixed(2)}:d=\${fadeDur.toFixed(2)}\`);
       let fullComp=[...vBase,\`[vcat]\${vOut.join(",")}[vout]\`,...aBase,\`[acat]\${aOut.join(",")}[aout]\`].join(";\\n");
@@ -467,7 +478,7 @@ async function hIe(t,e){
     }
     let vf=["setsar=1:1",...hudVf];
     if(enTrans)vf.push(\`fade=t=in:st=0:d=\${fadeDur.toFixed(2)}\`,\`fade=t=out:st=\${fadeOutSt.toFixed(2)}:d=\${fadeDur.toFixed(2)}\`);
-    vf.push(\`fps=fps=\${tfps}\`,"format=yuv420p");
+    vf.push(\`fps=fps=\${tfps}:round=near\`,"format=yuv420p");
     let fScript=R_.default.join(tmpHudDir,\`filter_seq_\${H.number}.txt\`);
     await pT.default.writeFile(fScript,vf.join(","),"utf8");
     let afFilter=enTrans?\`aresample=async=1:first_pts=0,afade=t=in:st=0:d=\${fadeDur.toFixed(2)},afade=t=out:st=\${fadeOutSt.toFixed(2)}:d=\${fadeDur.toFixed(2)}\`:"aresample=async=1:first_pts=0";
