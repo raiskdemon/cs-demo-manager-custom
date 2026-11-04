@@ -97,27 +97,32 @@ function buildAiHighlightsCandidates({match,steamIds,startSecondsBeforeEvent=3,e
   return candidates;
 }
 function buildAiHighlightsSequences({match,steamIds,maxDurationSeconds=180,includeIntro=!0,includeOutro=!0,alwaysIncludeWildcardKills=!0,settings,firstSequenceNumber=1,startSecondsBeforeEvent=3,endSecondsAfterEvent=2}){
+  let tr=match.tickrate>0?match.tickrate:64;
   let candidates=buildAiHighlightsCandidates({match,steamIds,startSecondsBeforeEvent,endSecondsAfterEvent});
   let introExtra=includeIntro?8:0,outroExtra=includeOutro?5:0;
   let budget=Math.max(10,maxDurationSeconds-introExtra-outroExtra),used=0,chosen=[],perPlayer=new Map(),remaining=[...candidates];
   let wildcardPlaysCount=0;
+  let minGapTicks=Math.round(tr*4);
+
   if(alwaysIncludeWildcardKills){
     let wildcards=remaining.filter(c=>c.isWildcard).sort((a,b)=>b.score-a.score);
     for(let wc of wildcards){
-      if(!chosen.some(s=>s.roundNumber===wc.roundNumber&&wc.startTick<=s.endTick&&wc.endTick>=s.startTick)){
+      // Check if already in chosen
+      let existing=chosen.find(s=>s.roundNumber===wc.roundNumber&&wc.startTick<=s.endTick+minGapTicks&&wc.endTick>=s.startTick-minGapTicks);
+      if(!existing){
         chosen.push(wc);
         wildcardPlaysCount++;
         perPlayer.set(wc.steamId,(perPlayer.get(wc.steamId)??0)+1);
       }
     }
-    remaining=remaining.filter(c=>!chosen.some(s=>s.roundNumber===c.roundNumber&&c.startTick<=s.endTick&&c.endTick>=s.startTick));
+    remaining=remaining.filter(c=>!chosen.some(s=>s.roundNumber===c.roundNumber&&c.startTick<=s.endTick+minGapTicks&&c.endTick>=s.startTick-minGapTicks));
   }
   while(remaining.length>0){
     let bestIdx=-1,bestVal=-1;
     for(let i=0;i<remaining.length;i++){
       let c=remaining[i];
       if(used+c.seconds>budget)continue;
-      if(chosen.some(s=>s.roundNumber===c.roundNumber&&c.startTick<=s.endTick&&c.endTick>=s.startTick))continue;
+      if(chosen.some(s=>s.roundNumber===c.roundNumber&&c.startTick<=s.endTick+minGapTicks&&c.endTick>=s.startTick-minGapTicks))continue;
       let val=c.score*Math.pow(0.82,perPlayer.get(c.steamId)??0);
       if(val>bestVal){bestVal=val;bestIdx=i}
     }
@@ -125,9 +130,47 @@ function buildAiHighlightsSequences({match,steamIds,maxDurationSeconds=180,inclu
     let pick=remaining.splice(bestIdx,1)[0];
     chosen.push(pick);used+=pick.seconds;perPlayer.set(pick.steamId,(perPlayer.get(pick.steamId)??0)+1);
   }
+
+  // Merge adjacent or overlapping plays in the SAME round into continuous multi-camera sequences
   chosen.sort((a,b)=>a.startTick-b.startTick);
-  let totalChosenSeconds=chosen.reduce((acc,c)=>acc+c.seconds,0);
-  let sequences=chosen.map((c,i)=>({
+  let mergedPlays=[];
+  for(let c of chosen){
+    if(mergedPlays.length===0){
+      mergedPlays.push({
+        ...c,
+        playerCameras:[{tick:c.startTick,playerSteamId:c.steamId,playerName:c.playerName,roundNumber:c.roundNumber}]
+      });
+    }else{
+      let prev=mergedPlays[mergedPlays.length-1];
+      if(c.roundNumber===prev.roundNumber&&c.startTick<=prev.endTick+minGapTicks){
+        prev.endTick=Math.max(prev.endTick,c.endTick);
+        prev.seconds=(prev.endTick-prev.startTick)/tr;
+        prev.kills+=c.kills;
+        prev.score+=c.score;
+        if(c.isWildcard)prev.isWildcard=!0;
+        let lastCam=prev.playerCameras[prev.playerCameras.length-1];
+        if(lastCam.playerSteamId!==c.steamId){
+          prev.playerCameras.push({
+            tick:Math.max(prev.startTick+16,c.startTick),
+            playerSteamId:c.steamId,
+            playerName:c.playerName,
+            roundNumber:c.roundNumber
+          });
+          prev.description+=` ➔ ${c.playerName} (${c.description})`;
+        }else{
+          prev.description+=` + ${c.description}`;
+        }
+      }else{
+        mergedPlays.push({
+          ...c,
+          playerCameras:[{tick:c.startTick,playerSteamId:c.steamId,playerName:c.playerName,roundNumber:c.roundNumber}]
+        });
+      }
+    }
+  }
+
+  let totalChosenSeconds=mergedPlays.reduce((acc,c)=>acc+c.seconds,0);
+  let sequences=mergedPlays.map((c,i)=>({
     number:firstSequenceNumber+i,
     startTick:c.startTick,
     endTick:c.endTick,
@@ -138,11 +181,11 @@ function buildAiHighlightsSequences({match,steamIds,maxDurationSeconds=180,inclu
     showAssists:settings.showAssists,
     recordAudio:settings.recordAudio,
     playerVoicesEnabled:settings.playerVoicesEnabled,
-    playersOptions:buildPlayersOptions(match.players,[c.steamId]),
-    playerCameras:[{tick:c.startTick,playerSteamId:c.steamId,playerName:c.playerName,roundNumber:c.roundNumber}],
+    playersOptions:buildPlayersOptions(match.players,c.playerCameras.map(cam=>cam.playerSteamId).filter(Boolean)),
+    playerCameras:c.playerCameras,
     cameras:[]
   }));
-  return{sequences,plays:chosen,totalSeconds:totalChosenSeconds+(chosen.length>0?introExtra+outroExtra:0),candidatesCount:candidates.length,wildcardPlaysCount};
+  return{sequences,plays:mergedPlays,totalSeconds:totalChosenSeconds+(mergedPlays.length>0?introExtra+outroExtra:0),candidatesCount:candidates.length,wildcardPlaysCount};
 }
 function GenerateAiHighlightsDialog(){
   let dispatch=Mu(),match=useCurrentMatch$2(),{settings,updateSettings}=useVideoSettings(),{hideDialog,showDialog}=useDialog(),client=useWebSocketClient(),navigate=useNavigate();

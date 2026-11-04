@@ -4,3 +4,7 @@ build/
 *.log
 app-extracted/
 backups/
+
+check-frames.mjs
+analyze-video.mjs
+static/
