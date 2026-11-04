@@ -917,4 +917,254 @@ function buildMatchHighlightsSequences({match,steamIds,rounds,weapons,perspectiv
           let kStart=Math.max(1,pk.tick-ticksBefore),kEnd=Math.min(maxTick,pk.tick+ticksAfter);
           let overlaps=rawSequences.some(s=>s.roundNumber===pk.roundNumber&&kStart<=s.endTick&&kEnd>=s.startTick);
           if(!overlaps){
-            rawSequences.push({startTick:kStart,endTick:kEnd,roundNumber:pk.roundNumber,playerCameras:[{tick:kStart,playerSteamId:sid}],primaryPlayerSteamId:sid,eventCount:1,isWild
+            rawSequences.push({startTick:kStart,endTick:kEnd,roundNumber:pk.roundNumber,playerCameras:[{tick:kStart,playerSteamId:sid}],primaryPlayerSteamId:sid,eventCount:1,isWildcard:Boolean(alwaysIncludeWildcardKills&&isWildcardKill(pk))});
+            needed--;
+          }
+        }
+      }
+    }
+  }
+  rawSequences.sort((a,b)=>a.startTick-b.startTick);
+  return rawSequences.map((seq,index)=>({
+    number:firstSequenceNumber+index,
+    startTick:seq.startTick,
+    endTick:seq.endTick,
+    roundNumber:seq.roundNumber,
+    showOnlyDeathNotices:settings.showOnlyDeathNotices,
+    deathNoticesDuration:settings.deathNoticesDuration,
+    showXRay:settings.showXRay,
+    showAssists:settings.showAssists,
+    recordAudio:settings.recordAudio,
+    playerVoicesEnabled:settings.playerVoicesEnabled,
+    playersOptions:buildPlayersOptions(match.players,seq.playerCameras.map(c=>c.playerSteamId).filter(Boolean)),
+    playerCameras:seq.playerCameras,
+    cameras:[]
+  }));
+}
+function GenerateMatchHighlightsDialog(){
+  let dispatch=Mu(),match=useCurrentMatch$2(),existingSequences=useCurrentMatchSequences(),{settings,updateSettings}=useVideoSettings(),{hideDialog,showDialog}=useDialog(),client=useWebSocketClient(),navigate=useNavigate();
+  let allSteamIds=(0,W.useMemo)(()=>match.players.map(p=>p.steamId),[match.players]);
+  let teamASteamIds=(0,W.useMemo)(()=>match.players.filter(p=>p.teamName===match.teamA.name).map(p=>p.steamId),[match.players,match.teamA.name]);
+  let teamBSteamIds=(0,W.useMemo)(()=>match.players.filter(p=>p.teamName===match.teamB.name).map(p=>p.steamId),[match.players,match.teamB.name]);
+  let[selectedSteamIds,setSelectedSteamIds]=(0,W.useState)(allSteamIds);
+  let[selectedRounds,setSelectedRounds]=(0,W.useState)([]);
+  let visibleWeapons=(0,W.useMemo)(()=>selectedSteamIds.length===0?[]:uniqueArray(match.kills.filter(k=>selectedSteamIds.includes(k.killerSteamId)).map(k=>k.weaponName)),[selectedSteamIds,match]);
+  let[selectedWeapons,setSelectedWeapons]=(0,W.useState)(visibleWeapons);
+  let[perspective,setPerspective]=(0,W.useState)(Vs.Player);
+  let[minKillsInRound,setMinKillsInRound]=(0,W.useState)(3);
+  let[lifeMode,setLifeMode]=(0,W.useState)("same_body");
+  let[includeClutches,setIncludeClutches]=(0,W.useState)(!0);
+  let[minClutchOpponents,setMinClutchOpponents]=(0,W.useState)(2);
+  let[rapidKillsEnabled,setRapidKillsEnabled]=(0,W.useState)(!0);
+  let[rapidMinKills,setRapidMinKills]=(0,W.useState)(3);
+  let[rapidWindowSeconds,setRapidWindowSeconds]=(0,W.useState)(5);
+  let[alwaysIncludeWildcardKills,setAlwaysIncludeWildcardKills]=(0,W.useState)(!0);
+  let[guaranteeAllPlayers,setGuaranteeAllPlayers]=(0,W.useState)(!1);
+  let[minSequencesPerPlayer,setMinSequencesPerPlayer]=(0,W.useState)(1);
+  let[adaptiveThresholdForLowFraggers,setAdaptiveThresholdForLowFraggers]=(0,W.useState)(!1);
+  let[hideGameWindow,setHideGameWindow]=(0,W.useState)(settings.hideGameWindow??!0);
+  let[hudPosition,setHudPosition]=(0,W.useState)(settings.hudPosition??"top-left");
+  let[showIntroScreen,setShowIntroScreen]=(0,W.useState)(settings.showIntroScreen??!0);
+  let[showOutroScreen,setShowOutroScreen]=(0,W.useState)(settings.showOutroScreen??!0);
+  let[showFunAwards,setShowFunAwards]=(0,W.useState)(settings.showFunAwards??!0);
+  let[enableKillCounter,setEnableKillCounter]=(0,W.useState)(settings.enableKillCounter??!0);
+  let[enableSlowMotion,setEnableSlowMotion]=(0,W.useState)(settings.enableSlowMotion??!0);
+  let[enableSequenceTransitions,setEnableSequenceTransitions]=(0,W.useState)(settings.enableSequenceTransitions??!0);
+  let[specialFilters,setSpecialFilters]=(0,W.useState)({onlyHeadshot:!1,onlyNoScope:!1,onlyThroughSmoke:!1,onlyWallbang:!1,onlyAirborne:!1,onlyBlind:!1,onlyEntryKill:!1,onlyUtilityOrKnife:!1,onlyTradeKill:!1,onlyBombAction:!1,mode:"bonus"});
+  let[startSecondsBeforeEvent,setStartSecondsBeforeEvent]=(0,W.useState)(3);
+  let[endSecondsAfterEvent,setEndSecondsAfterEvent]=(0,W.useState)(2);
+  let[maxSecondsBetweenEvents,setMaxSecondsBetweenEvents]=(0,W.useState)(10);
+  let[preserveExistingSequences,setPreserveExistingSequences]=(0,W.useState)(!1);
+  let[isStartingRecording,setIsStartingRecording]=(0,W.useState)(!1);
+  let minKillsOptions=[{value:1,label:"1K+ (Todos os abates selecionados)"},{value:2,label:"2K+ (Double Kill ou mais)"},{value:3,label:"3K+ (Triple Kill ou mais - Recomendado)"},{value:4,label:"4K+ (Quadra Kill ou mais)"},{value:5,label:"5K+ (5 abates ou mais)"},{value:6,label:"6K+ (6 abates ou mais - 10x10)"},{value:7,label:"7K+ (7 abates ou mais - 10x10)"},{value:8,label:"8K+ (8 abates ou mais - 10x10)"},{value:9,label:"9K+ (9 abates ou mais - 10x10)"},{value:10,label:"10K (10 abates no round - 10x10)"}];
+  let lifeModeOptions=[{value:"same_body",label:"No mesmo boneco (Próprio OU Bot assumido, sem morrer no meio) [Recomendado]"},{value:"human_only",label:"Apenas no próprio boneco (Ignorar kills controlando Bot)"},{value:"bot_only",label:"Apenas controlando Bot (Somente lances jogando no Bot)"},{value:"whole_round",label:"Somar round inteiro (Permitir morrer e continuar matando no Bot)"}];
+  let minClutchOptions=[{value:1,label:"1v1 ou maior"},{value:2,label:"1v2 ou maior (Recomendado)"},{value:3,label:"1v3 ou maior"},{value:4,label:"1v4 ou maior"},{value:5,label:"1v5 ou maior"},{value:6,label:"1v6 ou maior (10x10)"},{value:7,label:"1v7 ou maior (10x10)"},{value:8,label:"1v8 ou maior (10x10)"}];
+  let minSequencesPerPlayerOptions=[{value:1,label:"Pelo menos 1 melhor lance de cada jogador"},{value:2,label:"Pelo menos 2 melhores lances de cada jogador"},{value:3,label:"Pelo menos 3 melhores lances de cada jogador"}];
+  let specialModeOptions=[{value:"bonus",label:"Incluir também abates com estes atributos (Bônus)"},{value:"restrict",label:"Exigir obrigatoriamente os atributos marcados (Restrito)"}];
+  let hudPositionOptions=[{value:"top-left",label:"Canto Superior Esquerdo (Recomendado - livre do Killfeed)"},{value:"bottom-left",label:"Canto Inferior Esquerdo"},{value:"bottom-right",label:"Canto Inferior Direito"},{value:"top-center",label:"Topo Centralizado"},{value:"top-right",label:"Canto Superior Direito"},{value:"none",label:"Desativado (Sem nome na tela)"}];
+  let rapidMinKillsOptions=[{value:2,label:"2 abates rápidos"},{value:3,label:"3 abates rápidos (Recomendado)"},{value:4,label:"4 abates rápidos"},{value:5,label:"5 abates rápidos"}];
+  let rapidWindowOptions=[{value:3,label:"em até 3 segundos (muito rápido)"},{value:5,label:"em até 5 segundos (Recomendado)"},{value:8,label:"em até 8 segundos"},{value:10,label:"em até 10 segundos"}];
+  let generatedSequences=(0,W.useMemo)(()=>{
+    let firstSequenceNumber=preserveExistingSequences?getNextSequenceNumber(existingSequences):1;
+    return buildMatchHighlightsSequences({match,steamIds:selectedSteamIds,rounds:selectedRounds,weapons:selectedWeapons,perspective,minKillsInRound,lifeMode,includeClutches,minClutchOpponents,guaranteeAllPlayers,minSequencesPerPlayer,adaptiveThresholdForLowFraggers,specialFilters,startSecondsBeforeEvent,endSecondsAfterEvent,maxSecondsBetweenEvents,settings,firstSequenceNumber,rapidKillsEnabled,rapidMinKills,rapidWindowSeconds,alwaysIncludeWildcardKills});
+  },[match,selectedSteamIds,selectedRounds,selectedWeapons,perspective,minKillsInRound,lifeMode,includeClutches,minClutchOpponents,guaranteeAllPlayers,minSequencesPerPlayer,adaptiveThresholdForLowFraggers,specialFilters,startSecondsBeforeEvent,endSecondsAfterEvent,maxSecondsBetweenEvents,settings,preserveExistingSequences,existingSequences,rapidKillsEnabled,rapidMinKills,rapidWindowSeconds,alwaysIncludeWildcardKills]);
+  let finalSequences=(0,W.useMemo)(()=>preserveExistingSequences?sortSequencesByNumber([...existingSequences,...generatedSequences]):generatedSequences,[preserveExistingSequences,existingSequences,generatedSequences]);
+  let totalDurationSeconds=(0,W.useMemo)(()=>{
+    if(match.tickrate<=0)return 0;
+    let introExtra=showIntroScreen&&finalSequences.length>0?8:0;
+    let outroExtra=showOutroScreen&&finalSequences.length>0?(showFunAwards?7:5):0;
+    return finalSequences.reduce((acc,s)=>acc+Math.max(0,s.endTick-s.startTick),0)/match.tickrate+introExtra+outroExtra;
+  },[finalSequences,match.tickrate,showIntroScreen,showOutroScreen,showFunAwards]);
+  let includedPlayersCount=(0,W.useMemo)(()=>{
+    let s=new Set();
+    for(let seq of finalSequences){for(let cam of seq.playerCameras){if(cam.playerSteamId)s.add(cam.playerSteamId);}}
+    return s.size;
+  },[finalSequences]);
+  let formatDur=sec=>{let r=Math.max(0,Math.round(sec)),m=Math.floor(r/60),s=r%60;return\`\${String(m).padStart(2,"0")}:\${String(s).padStart(2,"0")}\`};
+  let applyPlayers=ids=>{setSelectedSteamIds(ids);setSelectedWeapons(ids.length===0?[]:uniqueArray(match.kills.filter(k=>ids.includes(k.killerSteamId)).map(k=>k.weaponName)))};
+  let applyTimelineOnly=()=>{
+    if(finalSequences.length===0)return;
+    dispatch(Fs({demoFilePath:match.demoFilePath,sequences:finalSequences}));
+    hideDialog();
+  };
+  let applyTimelineAndRecordNow=async()=>{
+    if(finalSequences.length===0||isStartingRecording)return;
+    setIsStartingRecording(!0);
+    await updateSettings({concatenateSequences:!0,hideGameWindow,hudPosition,showIntroScreen,showOutroScreen,showFunAwards,enableKillCounter,enableSlowMotion,enableSequenceTransitions});
+    dispatch(Fs({demoFilePath:match.demoFilePath,sequences:finalSequences}));
+    try{
+      let payload={...settings,concatenateSequences:!0,hideGameWindow,hudPosition,showIntroScreen,showOutroScreen,showFunAwards,enableKillCounter,enableSlowMotion,enableSequenceTransitions,checksum:match.checksum,game:match.game,tickrate:match.tickrate,demoPath:match.demoFilePath,mapName:match.mapName,sequences:finalSequences};
+      await client.send({name:Lg.AddVideoToQueue,payload});
+      await client.send({name:Lg.ResumeVideoQueue});
+      hideDialog();
+      await navigate(Nu.Videos);
+    }catch(err){
+      setIsStartingRecording(!1);
+      let msg=getPlaybackErrorMessageFromErrorCode(isErrorCode(err)?err:Sl.UnknownError,match.game);
+      showDialog((0,Q.jsx)(AddVideoToQueueErrorDialog,{children:msg}));
+    }
+  };
+  return(0,Q.jsxs)(Dialog$1,{onEnterPressed:applyTimelineOnly,children:[
+    (0,Q.jsx)(DialogHeader,{children:(0,Q.jsx)(DialogTitle,{children:"Gerar Highlights da Partida (Timeline & Gravação Automática)"})}),
+    (0,Q.jsx)(DialogContent,{children:(0,Q.jsxs)("div",{className:"flex w-[680px] max-h-[78vh] overflow-y-auto flex-col gap-y-12 pr-4",children:[
+      (0,Q.jsxs)("div",{className:"flex flex-wrap items-center gap-8 rounded-4 border border-gray-400 p-8",children:[
+        (0,Q.jsx)("span",{className:"text-body-strong mr-4",children:"Presets Rápidos:"}),
+        (0,Q.jsx)(Button$1,{onClick:()=>{setMinKillsInRound(4);setLifeMode("same_body");setIncludeClutches(!0);setMinClutchOpponents(2);setGuaranteeAllPlayers(!0);setMinSequencesPerPlayer(1);setAdaptiveThresholdForLowFraggers(!0);setSpecialFilters({onlyHeadshot:!1,onlyNoScope:!0,onlyThroughSmoke:!0,onlyWallbang:!0,onlyAirborne:!1,onlyBlind:!1,onlyEntryKill:!1,onlyUtilityOrKnife:!0,onlyTradeKill:!1,onlyBombAction:!1,mode:"bonus"})},children:"10x10 Amigos (4K+ Mesmo Boneco + Todos Aparecem)"}),
+        (0,Q.jsx)(Button$1,{onClick:()=>{setMinKillsInRound(5);setLifeMode("same_body");setIncludeClutches(!0);setMinClutchOpponents(3);setGuaranteeAllPlayers(!1);setAdaptiveThresholdForLowFraggers(!1);setSpecialFilters({onlyHeadshot:!1,onlyNoScope:!0,onlyThroughSmoke:!0,onlyWallbang:!0,onlyAirborne:!1,onlyBlind:!1,onlyEntryKill:!1,onlyUtilityOrKnife:!1,onlyTradeKill:!1,onlyBombAction:!1,mode:"bonus"})},children:"10x10 Insano (5K+ Mesmo Boneco / Clutches 1v3+)"}),
+        (0,Q.jsx)(Button$1,{onClick:()=>{setMinKillsInRound(3);setLifeMode("same_body");setIncludeClutches(!0);setMinClutchOpponents(2);setGuaranteeAllPlayers(!1);setAdaptiveThresholdForLowFraggers(!1);setSpecialFilters({onlyHeadshot:!1,onlyNoScope:!0,onlyThroughSmoke:!0,onlyWallbang:!0,onlyAirborne:!1,onlyBlind:!1,onlyEntryKill:!1,onlyUtilityOrKnife:!1,onlyTradeKill:!1,onlyBombAction:!1,mode:"bonus"})},children:"Padrão (3K+ / Clutches / Bônus)"})
+      ]}),
+      (0,Q.jsxs)("div",{className:"flex flex-col gap-y-8",children:[
+        (0,Q.jsxs)("div",{className:"flex items-center gap-x-8",children:[
+          (0,Q.jsx)("span",{className:"text-body-strong",children:"Seleção Rápida de Jogadores:"}),
+          (0,Q.jsxs)(Button$1,{onClick:()=>applyPlayers(allSteamIds),children:["Todos (",allSteamIds.length,")"]}),
+          (0,Q.jsx)(Button$1,{onClick:()=>applyPlayers(teamASteamIds),children:match.teamA.name}),
+          (0,Q.jsx)(Button$1,{onClick:()=>applyPlayers(teamBSteamIds),children:match.teamB.name})
+        ]}),
+        (0,Q.jsx)(PlayersSelect,{players:match.players,selectedSteamIds,onChange:applyPlayers})
+      ]}),
+      (0,Q.jsxs)("div",{className:"flex flex-col gap-y-8 rounded-4 border border-gray-400 p-8",children:[
+        (0,Q.jsx)("span",{className:"text-body-strong",children:"Critério de Abates no Round & Controle de Bot (10x10):"}),
+        (0,Q.jsx)(Select$1,{label:"Regra de Boneco / Vida no Round (Evitar somar kills após morrer e pegar Bot)",options:lifeModeOptions,value:lifeMode,onChange:setLifeMode}),
+        (0,Q.jsxs)("div",{className:"grid grid-cols-2 gap-12",children:[
+          (0,Q.jsxs)("div",{className:"flex flex-col gap-y-8",children:[
+            (0,Q.jsx)(Select$1,{label:"Mínimo de abates no mesmo boneco/round (1K a 10K)",options:minKillsOptions,value:minKillsInRound,onChange:setMinKillsInRound}),
+            (0,Q.jsx)(Select$1,{label:"Perspectiva da Câmera (POV)",options:[{value:Vs.Player,label:"Jogador (Autor do Abate)"},{value:Vs.Enemy,label:"Inimigo (Vítima)"}],value:perspective,onChange:setPerspective})
+          ]}),
+          (0,Q.jsxs)("div",{className:"flex flex-col gap-y-8",children:[
+            (0,Q.jsx)(Checkbox,{label:"Incluir Clutches vencidos automaticamente",isChecked:includeClutches,onChange:e=>setIncludeClutches(e.target.checked)}),
+            includeClutches&&(0,Q.jsx)(Select$1,{label:"Mínimo de oponentes no Clutch",options:minClutchOptions,value:minClutchOpponents,onChange:setMinClutchOpponents})
+          ]})
+        ]}),
+        (0,Q.jsx)(Checkbox,{label:"Incluir abates rápidos em sequência (entra no vídeo mesmo sem atingir o mínimo de abates do round)",isChecked:rapidKillsEnabled,onChange:e=>setRapidKillsEnabled(e.target.checked)}),
+        rapidKillsEnabled&&(0,Q.jsxs)("div",{className:"grid grid-cols-2 gap-12",children:[
+          (0,Q.jsx)(Select$1,{label:"Quantidade de abates rápidos (mesmo boneco)",options:rapidMinKillsOptions,value:rapidMinKills,onChange:setRapidMinKills}),
+          (0,Q.jsx)(Select$1,{label:"Janela de tempo entre o 1º e o último abate",options:rapidWindowOptions,value:rapidWindowSeconds,onChange:setRapidWindowSeconds})
+        ]})
+      ]}),
+      (0,Q.jsxs)("div",{className:"flex flex-col gap-y-8 rounded-4 border border-gray-400 p-8",children:[
+        (0,Q.jsx)("span",{className:"text-body-strong",children:"Inclusão de Jogadores com Menos Kills (Para Todos Aparecerem no Highlight):"}),
+        (0,Q.jsx)(Checkbox,{label:"Garantir que todos os jogadores selecionados apareçam no vídeo (mesmo sem atingir o mínimo de kills)",isChecked:guaranteeAllPlayers,onChange:e=>setGuaranteeAllPlayers(e.target.checked)}),
+        guaranteeAllPlayers&&(0,Q.jsx)(Select$1,{label:"Quantidade mínima de melhores lances garantidos por jogador",options:minSequencesPerPlayerOptions,value:minSequencesPerPlayer,onChange:setMinSequencesPerPlayer}),
+        (0,Q.jsx)(Checkbox,{label:"Critério adaptativo: reduzir exigência de kills no round para jogadores na metade inferior do placar",isChecked:adaptiveThresholdForLowFraggers,onChange:e=>setAdaptiveThresholdForLowFraggers(e.target.checked)})
+      ]}),
+      (0,Q.jsxs)("div",{className:"flex flex-col gap-y-8 rounded-4 border border-gray-400 p-8",children:[
+        (0,Q.jsx)("span",{className:"text-body-strong",children:"Filtros de Abates Especiais & Lances Divertidos:"}),
+        (0,Q.jsxs)("div",{className:"grid grid-cols-3 gap-8",children:[
+          (0,Q.jsx)(Checkbox,{label:"Headshot (HS)",isChecked:specialFilters.onlyHeadshot,onChange:e=>setSpecialFilters({...specialFilters,onlyHeadshot:e.target.checked})}),
+          (0,Q.jsx)(Checkbox,{label:"No-Scope",isChecked:specialFilters.onlyNoScope,onChange:e=>setSpecialFilters({...specialFilters,onlyNoScope:e.target.checked})}),
+          (0,Q.jsx)(Checkbox,{label:"Através da Smoke",isChecked:specialFilters.onlyThroughSmoke,onChange:e=>setSpecialFilters({...specialFilters,onlyThroughSmoke:e.target.checked})}),
+          (0,Q.jsx)(Checkbox,{label:"Wallbang (Varado)",isChecked:specialFilters.onlyWallbang,onChange:e=>setSpecialFilters({...specialFilters,onlyWallbang:e.target.checked})}),
+          (0,Q.jsx)(Checkbox,{label:"No Ar (Airborne)",isChecked:specialFilters.onlyAirborne,onChange:e=>setSpecialFilters({...specialFilters,onlyAirborne:e.target.checked})}),
+          (0,Q.jsx)(Checkbox,{label:"Cego de Flash",isChecked:specialFilters.onlyBlind,onChange:e=>setSpecialFilters({...specialFilters,onlyBlind:e.target.checked})}),
+          (0,Q.jsx)(Checkbox,{label:"First Kill (Entry)",isChecked:specialFilters.onlyEntryKill,onChange:e=>setSpecialFilters({...specialFilters,onlyEntryKill:e.target.checked})}),
+          (0,Q.jsx)(Checkbox,{label:"Faca / Zeus / HE / Molotov",isChecked:specialFilters.onlyUtilityOrKnife,onChange:e=>setSpecialFilters({...specialFilters,onlyUtilityOrKnife:e.target.checked})}),
+          (0,Q.jsx)(Checkbox,{label:"Trade Kill (Vingança)",isChecked:specialFilters.onlyTradeKill,onChange:e=>setSpecialFilters({...specialFilters,onlyTradeKill:e.target.checked})}),
+          (0,Q.jsx)(Checkbox,{label:"Plantou / Defusou C4",isChecked:specialFilters.onlyBombAction,onChange:e=>setSpecialFilters({...specialFilters,onlyBombAction:e.target.checked})})
+        ]}),
+        (0,Q.jsx)(Select$1,{label:"Modo dos atributos especiais",options:specialModeOptions,value:specialFilters.mode,onChange:mode=>setSpecialFilters({...specialFilters,mode})})
+      ]}),
+      (0,Q.jsx)(RoundsSelect,{rounds:match.rounds,selectedRoundNumbers:selectedRounds,onChange:setSelectedRounds}),
+      visibleWeapons.length>0&&(0,Q.jsx)(WeaponsFilter,{weapons:visibleWeapons,selectedWeapons,hasActiveFilter:selectedWeapons.length>0&&selectedWeapons.length!==visibleWeapons.length,onChange:setSelectedWeapons}),
+      (0,Q.jsxs)("div",{className:"grid grid-cols-3 gap-8 rounded-4 border border-gray-400 p-8",children:[
+        (0,Q.jsx)(SecondsInput,{label:"Segundos antes do lance",defaultValue:startSecondsBeforeEvent,onChange:setStartSecondsBeforeEvent}),
+        (0,Q.jsx)(SecondsInput,{label:"Segundos após o lance",defaultValue:endSecondsAfterEvent,onChange:setEndSecondsAfterEvent}),
+        (0,Q.jsx)(SecondsInput,{label:"Agrupar lances próximos (máx. s)",defaultValue:maxSecondsBetweenEvents,onChange:setMaxSecondsBetweenEvents})
+      ]}),
+      (0,Q.jsxs)("div",{className:"flex flex-col gap-y-8 rounded-4 border border-gray-400 p-8",children:[
+        (0,Q.jsx)("span",{className:"text-body-strong",children:"Intro (8s), Encerramento (5s/7s), HUD, Contador de Kills & Câmera Lenta:"}),
+        (0,Q.jsx)(Select$1,{label:"Posição do Nome na Tela (Formato: POV: Nome do Jogador - Round X)",options:hudPositionOptions,value:hudPosition,onChange:async pos=>{setHudPosition(pos);await updateSettings({hudPosition:pos});}}),
+        (0,Q.jsx)(Checkbox,{label:"Contador de kills animado no HUD (1K, Double, Triple, Ace, Clutches e Armas)",isChecked:enableKillCounter,onChange:async e=>{let c=e.target.checked;setEnableKillCounter(c);await updateSettings({enableKillCounter:c});}}),
+        (0,Q.jsx)(Checkbox,{label:"Câmera lenta (Slow Motion 0.5x em 120 FPS) em abates épicos (No-Scope, Faca, Wallbang e Clutches)",isChecked:enableSlowMotion,onChange:async e=>{let c=e.target.checked;setEnableSlowMotion(c);await updateSettings({enableSlowMotion:c});}}),
+        (0,Q.jsx)(Checkbox,{label:"Incluir tela de introdução no início do vídeo (8s com Mapa, Placar Final e Tabela KDA dos Times)",isChecked:showIntroScreen,onChange:async e=>{let c=e.target.checked;setShowIntroScreen(c);await updateSettings({showIntroScreen:c});}}),
+        (0,Q.jsx)(Checkbox,{label:"Incluir tela de encerramento no final do vídeo (Outro com MVP e Destaques da Partida)",isChecked:showOutroScreen,onChange:async e=>{let c=e.target.checked;setShowOutroScreen(c);await updateSettings({showOutroScreen:c});}}),
+        (0,Q.jsx)(Checkbox,{label:"Sempre incluir abates coringas (No-Scope, Faca e Zeus - isentos de filtros)",isChecked:alwaysIncludeWildcardKills,onChange:e=>setAlwaysIncludeWildcardKills(e.target.checked)}),
+        (0,Q.jsx)(Checkbox,{label:"Troféus engraçados da partida no encerramento (Destaque cômico para todos os jogadores: Porta da Esperança, Cearense Lover, Bob Marley, Pikachu, etc.)",isChecked:showFunAwards,onChange:async e=>{let c=e.target.checked;setShowFunAwards(c);await updateSettings({showFunAwards:c});}}),
+        (0,Q.jsx)(Checkbox,{label:"Transição suave (Fade-In / Fade-Out em vídeo e áudio) entre uma sequência e outra",isChecked:enableSequenceTransitions,onChange:async e=>{let c=e.target.checked;setEnableSequenceTransitions(c);await updateSettings({enableSequenceTransitions:c});}})
+      ]}),
+      (0,Q.jsxs)("div",{className:"flex flex-col gap-y-8 rounded-4 border border-gray-400 p-8",children:[
+        (0,Q.jsx)(Checkbox,{label:"Gravar com o CS oculto em 2º plano (Posiciona a janela fora da tela sem roubar o foco do PC)",isChecked:hideGameWindow,onChange:async e=>{let c=e.target.checked;setHideGameWindow(c);await updateSettings({hideGameWindow:c});}}),
+        (0,Q.jsx)(Checkbox,{label:"Manter sequências já existentes na timeline",isChecked:preserveExistingSequences,onChange:e=>setPreserveExistingSequences(e.target.checked)})
+      ]}),
+      (0,Q.jsx)(
+        "div",
+        { className: "flex items-center justify-between rounded-4 bg-gray-200 p-12" },
+        (0, Q.jsxs)("div", {
+          className: "flex flex-col",
+          children: [
+            (0, Q.jsxs)("span", {
+              className: "text-body-strong",
+              children: [
+                "Resumo da Timeline: ",
+                finalSequences.length,
+                " sequência(s)",
+                showIntroScreen ? " + Intro (8s)" : "",
+                showOutroScreen ? (showFunAwards ? " + Outro com Troféus (7s)" : " + Outro (5s)") : "",
+                " | Jogadores contemplados: ",
+                includedPlayersCount,
+                " de ",
+                selectedSteamIds.length,
+              ],
+            }),
+            (0, Q.jsxs)("span", {
+              className: "text-caption",
+              children: [
+                "Duração estimada: ",
+                formatDur(totalDurationSeconds),
+                " | Codec GPU: ",
+                settings.ffmpegSettings.videoCodec,
+                " | HUD: ",
+                hudPosition === "none" ? "Desativado" : hudPosition,
+                enableKillCounter ? " (Contador Ativo)" : "",
+                " | Slow-Mo: ",
+                enableSlowMotion ? "0.5x (120 FPS)" : "Off",
+                " | Transições: ",
+                enableSequenceTransitions ? "Fade Suave" : "Corte Seco",
+              ],
+            }),
+          ],
+        }),
+      )
+    ]})}),
+    (0,Q.jsxs)(DialogFooter,{children:[
+      (0,Q.jsxs)(Button$1,{variant:zg.Primary,onClick:applyTimelineAndRecordNow,isDisabled:finalSequences.length===0||isStartingRecording,children:["Montar Timeline e Gravar Agora (",finalSequences.length,")"]}),
+      (0,Q.jsx)(Button$1,{onClick:applyTimelineOnly,isDisabled:finalSequences.length===0||isStartingRecording,children:"Apenas Montar Timeline"}),
+      (0,Q.jsx)(CancelButton,{onClick:hideDialog})
+    ]})
+  ]});
+}
+function GenerateMatchHighlightsButton(){
+  let{showDialog}=useDialog();
+  return(0,Q.jsx)(Button$1,{variant:zg.Primary,onClick:()=>{showDialog((0,Q.jsx)(GenerateMatchHighlightsDialog,{}))},children:"Gerar Highlights da Partida"});
+}`;
+
+const aiHighlightsCode = fs.readFileSync(new URL('./patches/ai-highlights.js', import.meta.url), 'utf8');
+uiJs = replaceExact(uiJs, oldGeneratePlayerBtn, `${highlightsCodeToAdd}\n${aiHighlightsCode}`, 'GenerateMatchHighlightsButton + AI highlights');
+
+// Wire GenerateMatchHighlightsButton + GenerateAiHighlightsButton into MatchVideo toolbar in assets/index-CaMMgvc3.js
+const oldMatchVideoToolbar = `children:[T,D,O,k,A,j,M,(0,Q.jsx)(\`div\`,{className:\`ml-auto\`,children:(0,Q.jsx)(DocumentationLink,{url:\`https://cs-demo-manager.com/docs/guides/video\`})})]`;
+const newMatchVideoToolbar = `children:[T,(0,Q.jsx)(GenerateMatchHighlightsButton,{}),(0,Q.jsx)(GenerateAiHighlightsButton,{}),D,O,k,A,j,M,(0,Q.jsx)(\`div\`,{className:\`ml-auto\`,children:(0,Q.jsx)(DocumentationLink,{url:\`https://cs-demo-manager.com/docs/guides/video\`})})]`;
+
+uiJs = replaceExact(uiJs, oldMatchVideoToolbar, newMatchVideoToolbar, 'MatchVideo toolbar');
+
+fs.writeFileSync(uiJsPath, uiJs, 'utf8');
+console.log('Successfully patched app-extracted/assets/index-CaMMgvc3.js');
