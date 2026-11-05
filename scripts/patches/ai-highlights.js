@@ -2,7 +2,7 @@ function isHumanSteamIdForAi(id){let s=String(id??"");return s!==""&&s!=="0"&&s.
 function aiKillPointsByCount(n){let table=[0,10,28,50,78,110,140,170,200,230,260];return n<=10?table[n]:260+(n-10)*30}
 function isExcludedWeaponForStreak(w){
   let name=String(w||"").toLowerCase();
-  return name.includes("ssg")||name.includes("scout")||name.includes("negev")||name.includes("m249");
+  return name.includes("ssg")||name.includes("scout")||name.includes("negev")||name.includes("m249")||name.includes("xm1014")||name.includes("xm 1014")||name.includes("xm");
 }
 function isAutoWeaponForStreak(w){
   let name=String(w||"").toLowerCase();
@@ -236,10 +236,10 @@ function buildAiHighlightsCandidates({match,steamIds,startSecondsBeforeEvent=3,e
         let w2=String(k2.weaponName??k2.weapon_name??"").toLowerCase();
         if(isExcludedWeaponForStreak(w1)||isExcludedWeaponForStreak(w2))continue;
         let gapSec=(k2.tick-k1.tick)/tr;
-        if(gapSec>10){
-          let ffStTick=k1.tick+Math.round(tr*1.2);
-          let ffEnTick=k2.tick-Math.round(tr*2.5);
-          if(ffEnTick>ffStTick+Math.round(tr*1.5)){
+        if(gapSec>5){
+          let ffStTick=k1.tick+Math.round(tr*1.0);
+          let ffEnTick=k2.tick-Math.round(tr*2.0);
+          if(ffEnTick>ffStTick+Math.round(tr*1.0)){
             fastForwardIntervals.push({startTick:ffStTick,endTick:ffEnTick,speed:2.0});
             fastForwardSaved+=((ffEnTick-ffStTick)/tr)*0.5;
           }
@@ -394,7 +394,7 @@ function GenerateAiHighlightsDialog(){
   return(0,Q.jsxs)(Dialog$1,{onEnterPressed:applyTimelineOnly,children:[
     (0,Q.jsx)(DialogHeader,{children:(0,Q.jsx)(DialogTitle,{children:"Highlights Automáticos (IA escolhe os melhores lances)"})}),
     (0,Q.jsx)(DialogContent,{children:(0,Q.jsxs)("div",{className:"flex w-[680px] max-h-[78vh] overflow-y-auto flex-col gap-y-12 pr-4",children:[
-      (0,Q.jsx)("p",{className:"text-caption",children:"A seleção analisa todos os abates da partida e dá uma nota para cada lance: quantidade de abates no mesmo boneco, velocidade da sequência, clutches, abates coringas (no-scope, faca, zeus, collat ssg 08 e 1-2 tiros seguidos com avanço 2x em esperas longas), headshots, wallbang, smoke, entry e rounds decisivos. Os lances coringas são garantidos no vídeo mesmo se ultrapassarem o tempo máximo."}),
+      (0,Q.jsx)("p",{className:"text-caption",children:"A seleção analisa todos os abates da partida e dá uma nota para cada lance: quantidade de abates no mesmo boneco, velocidade da sequência, clutches, abates coringas (no-scope, faca, zeus, collat ssg 08 e 1-2 tiros seguidos com avanço 2x em esperas > 5s), headshots, wallbang, smoke, entry e rounds decisivos. Os lances coringas são garantidos no vídeo mesmo se ultrapassarem o tempo máximo."}),
       (0,Q.jsxs)("div",{className:"flex flex-col gap-y-8",children:[
         (0,Q.jsxs)("div",{className:"flex items-center gap-x-8",children:[
           (0,Q.jsx)("span",{className:"text-body-strong",children:"Jogadores considerados:"}),
@@ -410,7 +410,7 @@ function GenerateAiHighlightsDialog(){
       ]}),
       (0,Q.jsxs)("div",{className:"flex flex-col gap-y-8 rounded-4 border border-gray-400 p-8",children:[
         (0,Q.jsx)(Checkbox,{label:"Sempre incluir abates coringas (No-Scope, Faca, Zeus, Collat SSG 08 e 1-2 Tiros Seguidos - isentos do limite de tempo)",isChecked:alwaysIncludeWildcardKills,onChange:e=>setAlwaysIncludeWildcardKills(e.target.checked)}),
-        (0,Q.jsx)(Checkbox,{label:"Avanço rápido (2x) em esperas longas (> 10s) entre abates (exceto SSG 08, Negev e M249)",isChecked:enableFastForward,onChange:e=>setEnableFastForward(e.target.checked)}),
+        (0,Q.jsx)(Checkbox,{label:"Avanço rápido (2x) em esperas (> 5s) entre abates (exceto SSG 08, Negev, M249 e XM1014)",isChecked:enableFastForward,onChange:e=>setEnableFastForward(e.target.checked)}),
         (0,Q.jsx)(Checkbox,{label:"Contador de kills animado no HUD (1K, Double, Triple, Ace, Clutches e Armas)",isChecked:enableKillCounter,onChange:e=>setEnableKillCounter(e.target.checked)}),
         (0,Q.jsx)(Checkbox,{label:"Câmera lenta (Slow Motion 0.5x) em abates épicos (No-Scope, Faca, Wallbang e Clutches)",isChecked:enableSlowMotion,onChange:e=>setEnableSlowMotion(e.target.checked)}),
         (0,Q.jsx)(Checkbox,{label:"Tela de introdução de 8s (Mapa, Placar Final e KDA dos jogadores)",isChecked:showIntroScreen,onChange:e=>setShowIntroScreen(e.target.checked)}),

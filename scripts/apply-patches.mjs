@@ -104,7 +104,7 @@ function getVidCodecArgs(c,A,d,is120Fps=!1){
 }
 function isExcludedWeaponForStreak(w){
   let name=String(w||"").toLowerCase();
-  return name.includes("ssg")||name.includes("scout")||name.includes("negev")||name.includes("m249");
+  return name.includes("ssg")||name.includes("scout")||name.includes("negev")||name.includes("m249")||name.includes("xm1014")||name.includes("xm 1014")||name.includes("xm");
 }
 function isAutoWeaponForStreak(w){
   let name=String(w||"").toLowerCase();
@@ -565,10 +565,10 @@ async function hIe(t,e){
       let w2=String(k2.weaponName??k2.weapon_name??"").toLowerCase();
       if(isExcludedWeaponForStreak(w1)||isExcludedWeaponForStreak(w2))continue;
       let gapSec=(k2.tick-k1.tick)/Math.max(1,tk);
-      if(gapSec>10){
-        let ffSt=(k1.tick-H.startTick)/Math.max(1,tk)+1.2;
-        let ffEn=(k2.tick-H.startTick)/Math.max(1,tk)-2.5;
-        if(ffEn>ffSt+1.5&&ffSt>0.2&&ffEn<rawSeqDur-0.2){
+      if(gapSec>5){
+        let ffSt=(k1.tick-H.startTick)/Math.max(1,tk)+1.0;
+        let ffEn=(k2.tick-H.startTick)/Math.max(1,tk)-2.0;
+        if(ffEn>ffSt+1.0&&ffSt>0.2&&ffEn<rawSeqDur-0.2){
           ffIntervals.push({startSec:ffSt,endSec:ffEn,speed:2.0});
         }
       }
@@ -1266,10 +1266,10 @@ function buildMatchHighlightsSequences({match,steamIds,rounds,weapons,perspectiv
       let w2=String(k2.weaponName??k2.weapon_name??"").toLowerCase();
       if(isExcludedWeaponForStreak(w1)||isExcludedWeaponForStreak(w2))continue;
       let gapSec=(k2.tick-k1.tick)/tickrate;
-      if(gapSec>10){
-        let ffSt=k1.tick+Math.round(tickrate*1.2);
-        let ffEn=k2.tick-Math.round(tickrate*2.5);
-        if(ffEn>ffSt+Math.round(tickrate*1.5)){
+      if(gapSec>5){
+        let ffSt=k1.tick+Math.round(tickrate*1.0);
+        let ffEn=k2.tick-Math.round(tickrate*2.0);
+        if(ffEn>ffSt+Math.round(tickrate*1.0)){
           ffIntervals.push({startTick:ffSt,endTick:ffEn,speed:2.0});
         }
       }
@@ -1451,7 +1451,7 @@ function GenerateMatchHighlightsDialog(){
         (0,Q.jsx)(Checkbox,{label:"Incluir tela de introdução no início do vídeo (8s com Mapa, Placar Final e Tabela KDA dos Times)",isChecked:showIntroScreen,onChange:async e=>{let c=e.target.checked;setShowIntroScreen(c);await updateSettings({showIntroScreen:c});}}),
         (0,Q.jsx)(Checkbox,{label:"Incluir tela de encerramento no final do vídeo (Outro com MVP e Destaques da Partida)",isChecked:showOutroScreen,onChange:async e=>{let c=e.target.checked;setShowOutroScreen(c);await updateSettings({showOutroScreen:c});}}),
         (0,Q.jsx)(Checkbox,{label:"Sempre incluir abates coringas (No-Scope, Faca, Zeus, Collat SSG 08 e 1-2 Tiros Seguidos - isentos de filtros)",isChecked:alwaysIncludeWildcardKills,onChange:e=>setAlwaysIncludeWildcardKills(e.target.checked)}),
-        (0,Q.jsx)(Checkbox,{label:"Avanço rápido (2x) em esperas longas (> 10s) entre abates (exceto SSG 08, Negev e M249)",isChecked:enableFastForward,onChange:async e=>{let c=e.target.checked;setEnableFastForward(c);await updateSettings({enableFastForward:c});}}),
+        (0,Q.jsx)(Checkbox,{label:"Avanço rápido (2x) em esperas (> 5s) entre abates (exceto SSG 08, Negev, M249 e XM1014)",isChecked:enableFastForward,onChange:async e=>{let c=e.target.checked;setEnableFastForward(c);await updateSettings({enableFastForward:c});}}),
         (0,Q.jsx)(Checkbox,{label:"Troféus engraçados da partida no encerramento (Destaque cômico para todos os jogadores: Porta da Esperança, Cearense Lover, Bob Marley, Pikachu, etc.)",isChecked:showFunAwards,onChange:async e=>{let c=e.target.checked;setShowFunAwards(c);await updateSettings({showFunAwards:c});}}),
         (0,Q.jsx)(Checkbox,{label:"Transição suave (Fade-In / Fade-Out em vídeo e áudio) entre uma sequência e outra",isChecked:enableSequenceTransitions,onChange:async e=>{let c=e.target.checked;setEnableSequenceTransitions(c);await updateSettings({enableSequenceTransitions:c});}})
       ]}),
