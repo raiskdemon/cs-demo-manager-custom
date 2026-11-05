@@ -421,10 +421,27 @@ function GenerateAiHighlightsDialog(){
       ]}),
       (0,Q.jsxs)("div",{className:"flex flex-col gap-y-4 rounded-4 border border-gray-400 p-8",children:[
         (0,Q.jsxs)("span",{className:"text-body-strong",children:["Lances escolhidos (",result.plays.length," de ",result.candidatesCount," candidatos):"]}),
-        result.plays.length===0?(0,Q.jsx)("span",{className:"text-caption",children:"Nenhum lance encontrado para os jogadores selecionados."}):(0,Q.jsx)("div",{className:"flex flex-col gap-y-2 max-h-[260px] overflow-y-auto",children:result.plays.map((p,i)=>(0,Q.jsxs)("div",{className:"flex justify-between gap-x-8 text-caption border-b border-gray-300 py-2",children:[
-          (0,Q.jsx)("span",{children:`${String(i+1).padStart(2,"0")}. Round ${p.roundNumber} • ${p.playerName} • ${p.description}${p.isWildcard?" 🃏 [Coringa]":""}`}),
-          (0,Q.jsx)("span",{className:"whitespace-nowrap",children:`${Math.round(p.seconds)}s • nota ${p.score}`})
-        ]},`${p.steamId}-${p.startTick}`))})
+        result.plays.length===0?(0,Q.jsx)("span",{className:"text-caption",children:"Nenhum lance encontrado para os jogadores selecionados."}):(0,Q.jsx)("div",{className:"flex flex-col gap-y-2 max-h-[260px] overflow-y-auto pr-4",children:result.plays.map((p,i)=>(0,Q.jsxs)("div",{
+          className:"group flex items-center justify-between gap-x-8 text-caption border-b border-gray-300 px-8 py-4 rounded-4 transition-colors duration-75 hover:bg-gray-300 cursor-default",
+          onMouseEnter:e=>{e.currentTarget.style.backgroundColor="var(--gray-300,#dbdbdb)"},
+          onMouseLeave:e=>{e.currentTarget.style.backgroundColor=""},
+          children:[
+            (0,Q.jsxs)("div",{className:"flex items-center gap-x-4 min-w-0 truncate",children:[
+              (0,Q.jsx)("span",{className:"font-medium text-gray-500",children:`${String(i+1).padStart(2,"0")}.`}),
+              (0,Q.jsx)("span",{className:"font-bold text-gray-900",children:`Round ${p.roundNumber}`}),
+              (0,Q.jsx)("span",{className:"text-gray-400",children:"•"}),
+              (0,Q.jsx)("span",{className:"font-bold text-gray-900",children:p.playerName}),
+              (0,Q.jsx)("span",{className:"text-gray-400",children:"•"}),
+              (0,Q.jsx)("span",{className:"text-gray-700",children:p.description}),
+              p.isWildcard?(0,Q.jsx)("span",{className:"font-bold text-gray-900",children:"🃏 [Coringa]"}):null
+            ]}),
+            (0,Q.jsx)("div",{className:"flex-1 mx-8 border-b border-dotted border-gray-400 opacity-40 group-hover:opacity-80"}),
+            (0,Q.jsxs)("div",{className:"flex items-center gap-x-8 whitespace-nowrap",children:[
+              (0,Q.jsx)("span",{className:"text-gray-500 font-medium",children:`${Math.round(p.seconds)}s`}),
+              (0,Q.jsx)("span",{className:"text-body-strong font-bold px-6 py-2 rounded-4 bg-gray-200 text-gray-900",children:`nota ${p.score}`})
+            ]})
+          ]
+        },`${p.steamId}-${p.startTick}-${i}`))})
       ]}),
       (0,Q.jsx)("div",{className:"rounded-4 bg-gray-200 p-12",children:(0,Q.jsxs)("span",{className:"text-body-strong",children:["Duração total estimada: ",formatDur(result.totalSeconds)," de ",formatDur(maxDurationSeconds),result.wildcardPlaysCount>0?` (inclui ${result.wildcardPlaysCount} lance(s) coringa(s) isento(s))`:"" ]})})
     ]})}),
