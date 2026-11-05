@@ -1,5 +1,9 @@
 function isHumanSteamIdForAi(id){let s=String(id??"");return s!==""&&s!=="0"&&s.length>5}
 function aiKillPointsByCount(n){let table=[0,10,28,50,78,110,140,170,200,230,260];return n<=10?table[n]:260+(n-10)*30}
+function isExcludedWeaponForStreak(w){
+  let name=String(w||"").toLowerCase();
+  return name.includes("ssg")||name.includes("scout")||name.includes("negev")||name.includes("m249");
+}
 function isAutoWeaponForStreak(w){
   let name=String(w||"").toLowerCase();
   return ["ak-47","m4a4","m4a1-s","galil ar","famas","aug","sg 553","negev","m249","mp9","mac-10","mp7","mp5-sd","ump-45","p90","bizon"].some(x=>name.includes(x));
@@ -9,6 +13,7 @@ function detectPrecisionKillStreaks(kills,shots){
   if(!Array.isArray(shots)||shots.length===0||!Array.isArray(kills)||kills.length===0)return result;
   let gunShots=shots.filter(s=>{
     let w=String(s.weapon_name??s.weaponName??"").toLowerCase();
+    if(isExcludedWeaponForStreak(w))return false;
     return !["knife","bayonet","karambit","dagger","flashbang","smoke","hegrenade","molotov","incendiary","decoy"].some(x=>w.includes(x));
   });
   let shotsByPlayerRound=new Map();
@@ -24,7 +29,12 @@ function detectPrecisionKillStreaks(kills,shots){
   for(let [key,pShots] of shotsByPlayerRound.entries()){
     let[rndStr,sid]=key.split(":");
     let rnd=Number(rndStr);
-    let pKills=kills.filter(k=>(k.round_number??k.roundNumber)===rnd&&(k.killer_steam_id??k.killerSteamId)===sid);
+    let pKills=kills.filter(k=>{
+      let isRnd=(k.round_number??k.roundNumber)===rnd;
+      let isSid=(k.killer_steam_id??k.killerSteamId)===sid;
+      let w=String(k.weapon_name??k.weaponName??"").toLowerCase();
+      return isRnd&&isSid&&!isExcludedWeaponForStreak(w);
+    });
     if(pKills.length<2)continue;
     pKills.sort((a,b)=>a.tick-b.tick);
     let currentStreak=[];
@@ -219,8 +229,25 @@ function buildAiHighlightsCandidates({match,steamIds,startSecondsBeforeEvent=3,e
       en>0&&tags.push("Entry");
       let startTick=Math.max(1,first.tick-before),endTick=Math.min(maxTick,last.tick+after);
       if(clutchBonus>0)endTick=Math.min(maxTick,endTick+Math.round(tr));
+      let fastForwardSaved=0,fastForwardIntervals=[];
+      for(let i=0;i<ks.length-1;i++){
+        let k1=ks[i],k2=ks[i+1];
+        let w1=String(k1.weaponName??k1.weapon_name??"").toLowerCase();
+        let w2=String(k2.weaponName??k2.weapon_name??"").toLowerCase();
+        if(isExcludedWeaponForStreak(w1)||isExcludedWeaponForStreak(w2))continue;
+        let gapSec=(k2.tick-k1.tick)/tr;
+        if(gapSec>10){
+          let ffStTick=k1.tick+Math.round(tr*1.2);
+          let ffEnTick=k2.tick-Math.round(tr*2.5);
+          if(ffEnTick>ffStTick+Math.round(tr*1.5)){
+            fastForwardIntervals.push({startTick:ffStTick,endTick:ffEnTick,speed:2.0});
+            fastForwardSaved+=((ffEnTick-ffStTick)/tr)*0.5;
+          }
+        }
+      }
+      let candSec=Math.max(1,(endTick-startTick)/tr-fastForwardSaved);
       let player=(match.players||[]).find(p=>p.steamId===first.killerSteamId);
-      candidates.push({steamId:first.killerSteamId,playerName:player?.name??first.killerName??"",roundNumber:first.roundNumber,kills:n,score:Math.round(score),startTick,endTick,seconds:(endTick-startTick)/tr,isWildcard,wildcardCount:(ns+kn+zeus+ssgCollat+precCount),description:`${n}K${tags.length>0?" • "+tags.join(", "):""}`});
+      candidates.push({steamId:first.killerSteamId,playerName:player?.name??first.killerName??"",roundNumber:first.roundNumber,kills:n,score:Math.round(score),startTick,endTick,seconds:candSec,fastForwardIntervals,isWildcard,wildcardCount:(ns+kn+zeus+ssgCollat+precCount),description:`${n}K${tags.length>0?" • "+tags.join(", "):""}`});
     }
   }
   return candidates;
@@ -267,16 +294,18 @@ function buildAiHighlightsSequences({match,steamIds,maxDurationSeconds=180,inclu
     if(mergedPlays.length===0){
       mergedPlays.push({
         ...c,
+        fastForwardIntervals:[...(c.fastForwardIntervals||[])],
         playerCameras:[{tick:c.startTick,playerSteamId:c.steamId,playerName:c.playerName,roundNumber:c.roundNumber}]
       });
     }else{
       let prev=mergedPlays[mergedPlays.length-1];
       if(c.roundNumber===prev.roundNumber&&c.startTick<=prev.endTick+minGapTicks){
         prev.endTick=Math.max(prev.endTick,c.endTick);
-        prev.seconds=(prev.endTick-prev.startTick)/tr;
+        prev.seconds=Math.max(1,prev.seconds+c.seconds);
         prev.kills+=c.kills;
         prev.score+=c.score;
         if(c.isWildcard)prev.isWildcard=!0;
+        if(c.fastForwardIntervals)prev.fastForwardIntervals=[...(prev.fastForwardIntervals||[]),...c.fastForwardIntervals];
         let lastCam=prev.playerCameras[prev.playerCameras.length-1];
         if(lastCam.playerSteamId!==c.steamId){
           prev.playerCameras.push({
@@ -292,6 +321,7 @@ function buildAiHighlightsSequences({match,steamIds,maxDurationSeconds=180,inclu
       }else{
         mergedPlays.push({
           ...c,
+          fastForwardIntervals:[...(c.fastForwardIntervals||[])],
           playerCameras:[{tick:c.startTick,playerSteamId:c.steamId,playerName:c.playerName,roundNumber:c.roundNumber}]
         });
       }
@@ -304,6 +334,7 @@ function buildAiHighlightsSequences({match,steamIds,maxDurationSeconds=180,inclu
     startTick:c.startTick,
     endTick:c.endTick,
     roundNumber:c.roundNumber,
+    fastForwardIntervals:c.fastForwardIntervals||[],
     showOnlyDeathNotices:settings.showOnlyDeathNotices,
     deathNoticesDuration:settings.deathNoticesDuration,
     showXRay:settings.showXRay,
@@ -330,6 +361,7 @@ function GenerateAiHighlightsDialog(){
   let[showFunAwards,setShowFunAwards]=(0,W.useState)(settings.showFunAwards??!0);
   let[enableKillCounter,setEnableKillCounter]=(0,W.useState)(settings.enableKillCounter??!0);
   let[enableSlowMotion,setEnableSlowMotion]=(0,W.useState)(settings.enableSlowMotion??!0);
+  let[enableFastForward,setEnableFastForward]=(0,W.useState)(settings.enableFastForward??!0);
   let[enableSequenceTransitions,setEnableSequenceTransitions]=(0,W.useState)(settings.enableSequenceTransitions??!0);
   let[hideGameWindow,setHideGameWindow]=(0,W.useState)(settings.hideGameWindow??!0);
   let[isStartingRecording,setIsStartingRecording]=(0,W.useState)(!1);
@@ -345,10 +377,10 @@ function GenerateAiHighlightsDialog(){
   let recordNow=async()=>{
     if(result.sequences.length===0||isStartingRecording)return;
     setIsStartingRecording(!0);
-    await updateSettings({hideGameWindow,hudPosition,showIntroScreen,showOutroScreen,showFunAwards,enableKillCounter,enableSlowMotion,enableSequenceTransitions});
+    await updateSettings({hideGameWindow,hudPosition,showIntroScreen,showOutroScreen,showFunAwards,enableKillCounter,enableSlowMotion,enableFastForward,enableSequenceTransitions});
     dispatch(Fs({demoFilePath:match.demoFilePath,sequences:result.sequences}));
     try{
-      let payload={...settings,concatenateSequences:!0,hideGameWindow,hudPosition,showIntroScreen,showOutroScreen,showFunAwards,enableKillCounter,enableSlowMotion,enableSequenceTransitions,checksum:match.checksum,game:match.game,tickrate:match.tickrate,demoPath:match.demoFilePath,mapName:match.mapName,sequences:result.sequences};
+      let payload={...settings,concatenateSequences:!0,hideGameWindow,hudPosition,showIntroScreen,showOutroScreen,showFunAwards,enableKillCounter,enableSlowMotion,enableFastForward,enableSequenceTransitions,checksum:match.checksum,game:match.game,tickrate:match.tickrate,demoPath:match.demoFilePath,mapName:match.mapName,sequences:result.sequences};
       await client.send({name:Lg.AddVideoToQueue,payload});
       await client.send({name:Lg.ResumeVideoQueue});
       hideDialog();
@@ -362,7 +394,7 @@ function GenerateAiHighlightsDialog(){
   return(0,Q.jsxs)(Dialog$1,{onEnterPressed:applyTimelineOnly,children:[
     (0,Q.jsx)(DialogHeader,{children:(0,Q.jsx)(DialogTitle,{children:"Highlights Automáticos (IA escolhe os melhores lances)"})}),
     (0,Q.jsx)(DialogContent,{children:(0,Q.jsxs)("div",{className:"flex w-[680px] max-h-[78vh] overflow-y-auto flex-col gap-y-12 pr-4",children:[
-      (0,Q.jsx)("p",{className:"text-caption",children:"A seleção analisa todos os abates da partida e dá uma nota para cada lance: quantidade de abates no mesmo boneco, velocidade da sequência, clutches, abates coringas (no-scope, faca, zeus, collat ssg 08 e 1-2 tiros seguidos), headshots, wallbang, smoke, entry e rounds decisivos. Os lances coringas são garantidos no vídeo mesmo se ultrapassarem o tempo máximo."}),
+      (0,Q.jsx)("p",{className:"text-caption",children:"A seleção analisa todos os abates da partida e dá uma nota para cada lance: quantidade de abates no mesmo boneco, velocidade da sequência, clutches, abates coringas (no-scope, faca, zeus, collat ssg 08 e 1-2 tiros seguidos com avanço 2x em esperas longas), headshots, wallbang, smoke, entry e rounds decisivos. Os lances coringas são garantidos no vídeo mesmo se ultrapassarem o tempo máximo."}),
       (0,Q.jsxs)("div",{className:"flex flex-col gap-y-8",children:[
         (0,Q.jsxs)("div",{className:"flex items-center gap-x-8",children:[
           (0,Q.jsx)("span",{className:"text-body-strong",children:"Jogadores considerados:"}),
@@ -378,6 +410,7 @@ function GenerateAiHighlightsDialog(){
       ]}),
       (0,Q.jsxs)("div",{className:"flex flex-col gap-y-8 rounded-4 border border-gray-400 p-8",children:[
         (0,Q.jsx)(Checkbox,{label:"Sempre incluir abates coringas (No-Scope, Faca, Zeus, Collat SSG 08 e 1-2 Tiros Seguidos - isentos do limite de tempo)",isChecked:alwaysIncludeWildcardKills,onChange:e=>setAlwaysIncludeWildcardKills(e.target.checked)}),
+        (0,Q.jsx)(Checkbox,{label:"Avanço rápido (2x) em esperas longas (> 10s) entre abates (exceto SSG 08, Negev e M249)",isChecked:enableFastForward,onChange:e=>setEnableFastForward(e.target.checked)}),
         (0,Q.jsx)(Checkbox,{label:"Contador de kills animado no HUD (1K, Double, Triple, Ace, Clutches e Armas)",isChecked:enableKillCounter,onChange:e=>setEnableKillCounter(e.target.checked)}),
         (0,Q.jsx)(Checkbox,{label:"Câmera lenta (Slow Motion 0.5x) em abates épicos (No-Scope, Faca, Wallbang e Clutches)",isChecked:enableSlowMotion,onChange:e=>setEnableSlowMotion(e.target.checked)}),
         (0,Q.jsx)(Checkbox,{label:"Tela de introdução de 8s (Mapa, Placar Final e KDA dos jogadores)",isChecked:showIntroScreen,onChange:e=>setShowIntroScreen(e.target.checked)}),

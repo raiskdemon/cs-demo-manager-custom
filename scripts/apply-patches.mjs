@@ -31,7 +31,7 @@ function replaceExact(content, target, replacement, label) {
 serverJs = replaceExact(
   serverJs,
   `video:{recordingSystem:Br.CounterStrike,recordingOutput:Pr.Video,closeGameAfterRecording:!0,concatenateSequences:!1,`,
-  `video:{recordingSystem:Br.CounterStrike,recordingOutput:Pr.Video,closeGameAfterRecording:!0,concatenateSequences:!1,hideGameWindow:!0,hudPosition:"top-left",showIntroScreen:!0,showOutroScreen:!0,showFunAwards:!0,enableKillCounter:!0,enableSlowMotion:!0,enableSequenceTransitions:!0,`,
+  `video:{recordingSystem:Br.CounterStrike,recordingOutput:Pr.Video,closeGameAfterRecording:!0,concatenateSequences:!1,hideGameWindow:!0,hudPosition:"top-left",showIntroScreen:!0,showOutroScreen:!0,showFunAwards:!0,enableKillCounter:!0,enableSlowMotion:!0,enableFastForward:!0,enableSequenceTransitions:!0,`,
   'default video settings in server.js',
 );
 
@@ -40,7 +40,7 @@ const oldCsgoFn = `async function gT({type:t,recordingSystem:e,recordingOutput:r
 \`);for(let D of b)A.addExecCommand(g,D)}A.addGoToTick(f,g);for(let b of H.playerCameras)A.addSpecPlayer(b.tick,b.playerSteamId);A.addExecCommand(g,"mirv_deathmsg filter clear"),H.playersOptions.length>0&&A.addExecCommand(g,"mirv_deathmsg filter add block=1");for(let b of H.playersOptions){let D=zgt(b);A.addExecCommand(g,D),b.showKill&&A.addExecCommand(g,\`mirv_deathmsg filter add attackerMatch=x\${b.steamId} attackerIsLocal=\${b.highlightKill?"1":"0"} block=0\`)}t==="record"&&(e===Br.HLAE?A.addExecCommand(H.startTick,"mirv_streams add normal defaultNormal").addExecCommand(H.startTick,"mirv_streams record start").addExecCommand(H.endTick,"mirv_streams record end"):A.addExecCommand(H.startTick,\`startmovie \${On(H)}\`).addExecCommand(H.endTick,"endmovie")),c&&h===a.length-1?A.addExecCommand(Wn(a).endTick+1,"quit"):A.addGoToNextSequence(H.endTick+l)}await A.write()}`;
 
 const newCsgoFn = `function buildFfmpegPresetParameters(u,is120Fps=!1){let c=u.videoCodec.trim(),cl=c.toLowerCase(),b=\`-y -c:v \${c}\`;if(u.outputParameters!==""){b+=\` \${u.outputParameters}\`}else if(cl.includes("nvenc")){b+=is120Fps?\` -preset p4 -tune hq -rc vbr -cq \${u.constantRateFactor} -b:v 20000k -maxrate 25000k -bufsize 40000k -pix_fmt yuv420p\`:\` -preset p4 -tune hq -rc vbr -cq \${u.constantRateFactor} -b:v 0 -pix_fmt yuv420p\`}else if(cl.includes("amf")){b+=is120Fps?\` -quality quality -rc cqp -qp_i \${u.constantRateFactor} -qp_p \${u.constantRateFactor} -b:v 20000k -maxrate 25000k -bufsize 40000k -pix_fmt yuv420p\`:\` -quality quality -rc cqp -qp_i \${u.constantRateFactor} -qp_p \${u.constantRateFactor} -pix_fmt yuv420p\`}else if(cl.includes("qsv")){b+=is120Fps?\` -preset medium -global_quality \${u.constantRateFactor} -b:v 20000k -maxrate 25000k -bufsize 40000k -pix_fmt yuv420p\`:\` -preset medium -global_quality \${u.constantRateFactor} -pix_fmt yuv420p\`}else if(cl.includes("mf")){let q=Math.max(1,Math.min(100,Math.round((51-u.constantRateFactor)*2)));b+=is120Fps?\` -rate_control quality -quality \${q} -b:v 20000k -maxrate 25000k -bufsize 40000k -pix_fmt yuv420p\`:\` -rate_control quality -quality \${q} -pix_fmt yuv420p\`}else{b+=is120Fps?\` -pix_fmt yuv420p -b:v 20000k -maxrate 25000k -bufsize 40000k -crf \${u.constantRateFactor}\`:\` -pix_fmt yuv420p -crf \${u.constantRateFactor}\`}return b}async function gT({type:t,recordingSystem:e,recordingOutput:r,encoderSoftware:n,outputFolderPath:o,framerate:i,demoPath:s,sequences:a,closeGameAfterRecording:c,tickrate:l,ffmpegSettings:u}){let A=new Po(s,y.Game.CSGO),d=["sv_cheats 1","volume 1","net_graph 0","fps_max 0","mat_queue_mode 2","engine_no_focus_sleep 0","host_timescale 0","mirv_snd_timescale 1","mirv_gameoverlay enable 0"],f=Math.min(l,128),m=Math.round(l);for(let b of d)A.addExecCommand(f,b);A.addExecCommand(1,"mirv_deathmsg filter clear");for(let h=0;h<a.length;h++){let H=a[h],prevEnd=h>0?a[h-1].endTick:0,g=Math.min(H.startTick-2,Math.max(prevEnd+4,H.startTick-m>0?H.startTick-m:1)),E=qgt(o,H),_=r===Pr.Video&&n===Bs.FFmpeg?\`csdmPreset\${H.number}\`:"afxClassic";A.addExecCommand(g,\`cl_draw_only_deathnotices \${H.showOnlyDeathNotices?1:0}\`),A.addExecCommand(g,\`mirv_deathmsg lifetime \${H.deathNoticesDuration}\`),H.playerVoicesEnabled?A.enablePlayerVoices(g):A.disablePlayerVoices(g);if(A.addExecCommand(g,\`mirv_streams record startMovieWav \${H.recordAudio?1:0}\`).addExecCommand(g,\`mirv_streams record name "\${E}"\`).addExecCommand(g,"mirv_replace_name filter clear").addExecCommand(g,\`spec_show_xray \${H.showXRay?1:0}\`).addExecCommand(g,\`mp_display_kill_assists \${H.showAssists?1:0}\`).addExecCommand(g,\`host_framerate \${i}\`),_!=="afxClassic"){let b=buildFfmpegPresetParameters(u,i>=100);A.addExecCommand(g,\`mirv_streams settings add ffmpeg \${_} "\${b} {QUOTE}\${E}\\\\\\\\video.\${u.videoContainer}{QUOTE}"\`).addExecCommand(g,\`mirv_streams settings edit afxDefault settings \${_}\`)}if(typeof H.cfg=="string"){let b=H.cfg.split(\`
-\`);for(let D of b)A.addExecCommand(g,D)}h===0&&g-4>f&&A.addGoToTick(f,g-4);for(let b of H.playerCameras)A.addSpecPlayer(b.tick,b.playerSteamId);A.addExecCommand(g,"mirv_deathmsg filter clear"),H.playersOptions.length>0&&A.addExecCommand(g,"mirv_deathmsg filter add block=1");for(let b of H.playersOptions){let D=zgt(b);A.addExecCommand(g,D),b.showKill&&A.addExecCommand(g,\`mirv_deathmsg filter add attackerMatch=x\${b.steamId} attackerIsLocal=\${b.highlightKill?"1":"0"} block=0\`)}t==="record"&&(e===Br.HLAE?A.addExecCommand(H.startTick,"mirv_streams add normal defaultNormal").addExecCommand(H.startTick,"mirv_streams record start").addExecCommand(H.endTick,"mirv_streams record end"):A.addExecCommand(H.startTick,\`startmovie \${On(H)}\`).addExecCommand(H.endTick,"endmovie"));if(h<a.length-1){let nextG=Math.max(H.endTick+4,a[h+1].startTick-m>0?a[h+1].startTick-m:1);nextG-4>H.endTick+4&&A.addGoToTick(H.endTick+2,nextG-4)}else if(c){A.addExecCommand(H.endTick+16,"quit")}}await A.write()}`;
+\`);for(let D of b)A.addExecCommand(g,D)}h===0&&g-4>f&&A.addGoToTick(f,g-4);for(let b of H.playerCameras)A.addSpecPlayer(b.tick,b.playerSteamId);A.addExecCommand(g,"mirv_deathmsg filter clear"),H.playersOptions.length>0&&A.addExecCommand(g,"mirv_deathmsg filter add block=1");for(let b of H.playersOptions){let D=zgt(b);A.addExecCommand(g,D),b.showKill&&A.addExecCommand(g,\`mirv_deathmsg filter add attackerMatch=x\${b.steamId} attackerIsLocal=\${b.highlightKill?"1":"0"} block=0\`)}if(t==="playback"&&Array.isArray(H.fastForwardIntervals)){for(let ff of H.fastForwardIntervals){A.addExecCommand(ff.startTick,"demo_timescale 2");A.addExecCommand(ff.endTick,"demo_timescale 1")}}t==="record"&&(e===Br.HLAE?A.addExecCommand(H.startTick,"mirv_streams add normal defaultNormal").addExecCommand(H.startTick,"mirv_streams record start").addExecCommand(H.endTick,"mirv_streams record end"):A.addExecCommand(H.startTick,\`startmovie \${On(H)}\`).addExecCommand(H.endTick,"endmovie"));if(h<a.length-1){let nextG=Math.max(H.endTick+4,a[h+1].startTick-m>0?a[h+1].startTick-m:1);nextG-4>H.endTick+4&&A.addGoToTick(H.endTick+2,nextG-4)}else if(c){A.addExecCommand(H.endTick+16,"quit")}}await A.write()}`;
 
 serverJs = replaceExact(serverJs, oldCsgoFn, newCsgoFn, 'createCsgoVideoJsonFile (gT)');
 
@@ -49,7 +49,7 @@ const oldCs2Fn = `async function LT({type:t,recordingSystem:e,recordingOutput:r,
 \`);for(let N of $)h.addExecCommand(_,N)}h.addPausePlayback(Math.max(1,g.startTick-4)),h.addGoToTick(1,Math.max(1,_-1));for(let $ of g.playerCameras){let N=A.find(U=>U.steamId===$.playerSteamId);N&&h.addSpecPlayer($.tick,N.slot)}for(let{id:$,tick:N}of g.cameras){let U=d.find(B=>$===B.id);U&&h.addFocusCamera(N,U)}h.addExecCommand(_,"mirv_deathmsg filter clear"),g.playersOptions.length>0&&h.addExecCommand(_,"mirv_deathmsg filter add block=1");for(let $ of g.playersOptions){let N=\`mirv_replace_name byXuid add x\${$.steamId} "\${$.playerName}"\`;if(h.addExecCommand(_,N),$.showKill&&h.addExecCommand(_,\`mirv_deathmsg filter add attackerMatch=x\${$.steamId} attackerIsLocal=\${$.highlightKill?"1":"0"} block=0\`),$.isVoiceEnabled){let U=g.playersOptions.filter(B=>B.isVoiceEnabled);if(U.length!==g.playersOptions.length){let B=[];for(let te of U){let R=A.find(L=>L.steamId===te.steamId);R&&B.push(R.userId)}let{valueLow:w,valueHigh:O}=mg(B);h.addExecCommand(_,\`tv_listen_voice_indices \${w}\`),h.addExecCommand(_,\`tv_listen_voice_indices_h \${O}\`)}}}t==="record"&&(e===Br.HLAE?h.addExecCommand(g.startTick,"mirv_streams record start").addExecCommand(g.endTick,"mirv_streams record end"):h.addExecCommand(g.startTick,\`startmovie \${On(g)}\`).addExecCommand(g.endTick,"endmovie")),c&&m===a.length-1?h.addExecCommand(Wn(a).endTick+64,"quit"):h.addGoToNextSequence(g.endTick+64)}await h.write()}`;
 
 const newCs2Fn = `async function LT({type:t,recordingSystem:e,recordingOutput:r,encoderSoftware:n,outputFolderPath:o,framerate:i,demoPath:s,sequences:a,closeGameAfterRecording:c,trueView:l,tickrate:u,players:A,cameras:d,ffmpegSettings:f}){let h=new Po(s,y.Game.CS2),H=["sv_cheats 1","volume 1","fps_max 0","engine_no_focus_sleep 0","cl_hud_telemetry_frametime_show 0","cl_hud_telemetry_net_misdelivery_show 0","cl_hud_telemetry_ping_show 0","cl_hud_telemetry_serverrecvmargin_graph_show 0","cl_trueview_show_status 0","r_show_build_info 0","mirv_streams record screen enabled 1",\`cl_demo_predict \${l?1:0}\`],E=Math.round(u);for(let $ of H)h.addExecCommand(1,$);for(let m=0;m<a.length;m++){let g=a[m],prevEnd=m>0?a[m-1].endTick:0,_=Math.min(g.startTick-2,Math.max(prevEnd+4,g.startTick-E>0?g.startTick-E:1)),b=fEt(o,g),D=r===Pr.Video&&n===Bs.FFmpeg?\`csdmPreset\${g.number}\`:"afxClassic";h.addExecCommand(_,\`cl_draw_only_deathnotices \${g.showOnlyDeathNotices?1:0}\`),h.addExecCommand(_,\`mirv_deathmsg lifetime \${g.deathNoticesDuration}\`),h.addExecCommand(_,"mirv_deathmsg clear"),g.playerVoicesEnabled?h.enablePlayerVoices(_):h.disablePlayerVoices(_);if(h.addExecCommand(_,\`mirv_streams record startMovieWav \${g.recordAudio?1:0}\`).addExecCommand(_,\`mirv_streams record name "\${b}"\`).addExecCommand(_,"mirv_deathmsg clear").addExecCommand(_,\`spec_show_xray \${g.showXRay?1:0}\`).addExecCommand(_,\`mp_display_kill_assists \${g.showAssists?1:0}\`),D!=="afxClassic"){let $=buildFfmpegPresetParameters(f,i>=100);h.addExecCommand(_,\`mirv_streams settings add ffmpeg \${D} "\${$} {QUOTE}\${b}\\\\\\\\video.\${f.videoContainer}{QUOTE}"\`).addExecCommand(_,\`mirv_streams record screen settings \${D}\`)}if(e===Br.HLAE?h.addExecCommand(_,\`mirv_streams record fps \${i}\`):h.addExecCommand(_,\`host_framerate \${i}\`),typeof g.cfg=="string"){let $=g.cfg.split(\`
-\`);for(let N of $)h.addExecCommand(_,N)}m===0&&(h.addPausePlayback(Math.max(1,g.startTick-4)),h.addGoToTick(1,Math.max(1,_-1)));for(let $ of g.playerCameras){let N=A.find(U=>U.steamId===$.playerSteamId);N&&h.addSpecPlayer($.tick,N.slot)}for(let{id:$,tick:N}of g.cameras){let U=d.find(B=>$===B.id);U&&h.addFocusCamera(N,U)}h.addExecCommand(_,"mirv_deathmsg filter clear"),g.playersOptions.length>0&&h.addExecCommand(_,"mirv_deathmsg filter add block=1");for(let $ of g.playersOptions){let N=\`mirv_replace_name byXuid add x\${$.steamId} "\${$.playerName}"\`;if(h.addExecCommand(_,N),$.showKill&&h.addExecCommand(_,\`mirv_deathmsg filter add attackerMatch=x\${$.steamId} attackerIsLocal=\${$.highlightKill?"1":"0"} block=0\`),$.isVoiceEnabled){let U=g.playersOptions.filter(B=>B.isVoiceEnabled);if(U.length!==g.playersOptions.length){let B=[];for(let te of U){let R=A.find(L=>L.steamId===te.steamId);R&&B.push(R.userId)}let{valueLow:w,valueHigh:O}=mg(B);h.addExecCommand(_,\`tv_listen_voice_indices \${w}\`),h.addExecCommand(_,\`tv_listen_voice_indices_h \${O}\`)}}}t==="record"&&(e===Br.HLAE?h.addExecCommand(g.startTick,"mirv_streams record start").addExecCommand(g.endTick,"mirv_streams record end"):h.addExecCommand(g.startTick,\`startmovie \${On(g)}\`).addExecCommand(g.endTick,"endmovie"));if(m<a.length-1){let nextG=Math.max(g.endTick+4,a[m+1].startTick-E>0?a[m+1].startTick-E:1);h.addPausePlayback(Math.max(1,a[m+1].startTick-4));nextG-1>g.endTick+4&&h.addGoToTick(g.endTick+2,Math.max(1,nextG-1))}else if(c){h.addExecCommand(g.endTick+64,"quit")}}await h.write()}`;
+\`);for(let N of $)h.addExecCommand(_,N)}m===0&&(h.addPausePlayback(Math.max(1,g.startTick-4)),h.addGoToTick(1,Math.max(1,_-1)));for(let $ of g.playerCameras){let N=A.find(U=>U.steamId===$.playerSteamId);N&&h.addSpecPlayer($.tick,N.slot)}for(let{id:$,tick:N}of g.cameras){let U=d.find(B=>$===B.id);U&&h.addFocusCamera(N,U)}h.addExecCommand(_,"mirv_deathmsg filter clear"),g.playersOptions.length>0&&h.addExecCommand(_,"mirv_deathmsg filter add block=1");for(let $ of g.playersOptions){let N=\`mirv_replace_name byXuid add x\${$.steamId} "\${$.playerName}"\`;if(h.addExecCommand(_,N),$.showKill&&h.addExecCommand(_,\`mirv_deathmsg filter add attackerMatch=x\${$.steamId} attackerIsLocal=\${$.highlightKill?"1":"0"} block=0\`),$.isVoiceEnabled){let U=g.playersOptions.filter(B=>B.isVoiceEnabled);if(U.length!==g.playersOptions.length){let B=[];for(let te of U){let R=A.find(L=>L.steamId===te.steamId);R&&B.push(R.userId)}let{valueLow:w,valueHigh:O}=mg(B);h.addExecCommand(_,\`tv_listen_voice_indices \${w}\`),h.addExecCommand(_,\`tv_listen_voice_indices_h \${O}\`)}}}if(t==="playback"&&Array.isArray(g.fastForwardIntervals)){for(let ff of g.fastForwardIntervals){h.addExecCommand(ff.startTick,"demo_timescale 2");h.addExecCommand(ff.endTick,"demo_timescale 1")}}t==="record"&&(e===Br.HLAE?h.addExecCommand(g.startTick,"mirv_streams record start").addExecCommand(g.endTick,"mirv_streams record end"):h.addExecCommand(g.startTick,\`startmovie \${On(g)}\`).addExecCommand(g.endTick,"endmovie"));if(m<a.length-1){let nextG=Math.max(g.endTick+4,a[m+1].startTick-E>0?a[m+1].startTick-E:1);h.addPausePlayback(Math.max(1,a[m+1].startTick-4));nextG-1>g.endTick+4&&h.addGoToTick(g.endTick+2,Math.max(1,nextG-1))}else if(c){h.addExecCommand(g.endTick+64,"quit")}}await h.write()}`;
 
 serverJs = replaceExact(serverJs, oldCs2Fn, newCs2Fn, 'createCs2VideoJsonFile (LT)');
 
@@ -102,15 +102,81 @@ function getVidCodecArgs(c,A,d,is120Fps=!1){
   }
   return args;
 }
+function isExcludedWeaponForStreak(w){
+  let name=String(w||"").toLowerCase();
+  return name.includes("ssg")||name.includes("scout")||name.includes("negev")||name.includes("m249");
+}
 function isAutoWeaponForStreak(w){
   let name=String(w||"").toLowerCase();
   return ["ak-47","m4a4","m4a1-s","galil ar","famas","aug","sg 553","negev","m249","mp9","mac-10","mp7","mp5-sd","ump-45","p90","bizon"].some(x=>name.includes(x));
+}
+function buildSpeedSegments(rawSeqDur,speedIntervals){
+  let points=new Set([0,rawSeqDur]);
+  for(let it of speedIntervals){
+    if(it.startSec>0&&it.startSec<rawSeqDur)points.add(it.startSec);
+    if(it.endSec>0&&it.endSec<rawSeqDur)points.add(it.endSec);
+  }
+  let sorted=[...points].sort((a,b)=>a-b);
+  let rawSegments=[];
+  for(let i=0;i<sorted.length-1;i++){
+    let s1=sorted[i],s2=sorted[i+1];
+    if(s2-s1<0.05)continue;
+    let mid=(s1+s2)/2;
+    let speed=1.0;
+    let slowMatch=speedIntervals.find(it=>it.speed===0.5&&mid>=it.startSec&&mid<=it.endSec);
+    if(slowMatch){
+      speed=0.5;
+    }else{
+      let ffMatch=speedIntervals.find(it=>it.speed===2.0&&mid>=it.startSec&&mid<=it.endSec);
+      if(ffMatch)speed=2.0;
+    }
+    rawSegments.push({rawStart:s1,rawEnd:s2,speed});
+  }
+  let merged=[];
+  for(let seg of rawSegments){
+    if(merged.length>0&&merged[merged.length-1].speed===seg.speed){
+      merged[merged.length-1].rawEnd=seg.rawEnd;
+    }else{
+      merged.push({...seg});
+    }
+  }
+  let currentOut=0;
+  for(let seg of merged){
+    seg.outStart=currentOut;
+    seg.outDur=(seg.rawEnd-seg.rawStart)/seg.speed;
+    seg.outEnd=currentOut+seg.outDur;
+    currentOut=seg.outEnd;
+  }
+  return{segments:merged,totalOutDuration:currentOut};
+}
+function splitIntervalsWithFastForward(rawIntervals,ffList,basePov){
+  let result=[];
+  for(let it of rawIntervals){
+    let pieces=[it];
+    for(let ff of ffList){
+      let nextPieces=[];
+      for(let p of pieces){
+        let ovSt=Math.max(p.rawStart,ff.startSec),ovEn=Math.min(p.rawEnd,ff.endSec);
+        if(ovEn>ovSt+0.1){
+          if(ovSt>p.rawStart+0.1)nextPieces.push({rawStart:p.rawStart,rawEnd:ovSt,text:p.text,borderColor:p.borderColor,borderWidth:p.borderWidth});
+          nextPieces.push({rawStart:ovSt,rawEnd:ovEn,text:\`\${basePov}  |  ⏩ AVANÇO RÁPIDO (2x)\`,borderColor:"0x06b6d4cc",borderWidth:2});
+          if(p.rawEnd>ovEn+0.1)nextPieces.push({rawStart:ovEn,rawEnd:p.rawEnd,text:p.text,borderColor:p.borderColor,borderWidth:p.borderWidth});
+        }else{
+          nextPieces.push(p);
+        }
+      }
+      pieces=nextPieces;
+    }
+    result.push(...pieces);
+  }
+  return result;
 }
 function detectPrecisionKillStreaks(kills,shots){
   let result=new Map();
   if(!Array.isArray(shots)||shots.length===0||!Array.isArray(kills)||kills.length===0)return result;
   let gunShots=shots.filter(s=>{
     let w=String(s.weapon_name??s.weaponName??"").toLowerCase();
+    if(isExcludedWeaponForStreak(w))return false;
     return !["knife","bayonet","karambit","dagger","flashbang","smoke","hegrenade","molotov","incendiary","decoy"].some(x=>w.includes(x));
   });
   let shotsByPlayerRound=new Map();
@@ -126,7 +192,12 @@ function detectPrecisionKillStreaks(kills,shots){
   for(let [key,pShots] of shotsByPlayerRound.entries()){
     let[rndStr,sid]=key.split(":");
     let rnd=Number(rndStr);
-    let pKills=kills.filter(k=>(k.round_number??k.roundNumber)===rnd&&(k.killer_steam_id??k.killerSteamId)===sid);
+    let pKills=kills.filter(k=>{
+      let isRnd=(k.round_number??k.roundNumber)===rnd;
+      let isSid=(k.killer_steam_id??k.killerSteamId)===sid;
+      let w=String(k.weapon_name??k.weaponName??"").toLowerCase();
+      return isRnd&&isSid&&!isExcludedWeaponForStreak(w);
+    });
     if(pKills.length<2)continue;
     pKills.sort((a,b)=>a.tick-b.tick);
     let currentStreak=[];
@@ -458,7 +529,7 @@ async function generateOutroVideoWithFFmpeg(cfg,signal){
 async function hIe(t,e){
   logger.debug("Generating video with FFmpeg"),logger.debug(t);
   let{tgaFiles:r,wavFilePath:n,videoFilePath:o}=await hT(t);
-  let{ffmpegExecutablePath:i,framerate:s,targetFramerate:tfInput,tickrate:tk=64,inputParameters:a,videoCodec:c,audioCodec:l,audioBitrate:u,constantRateFactor:A,outputParameters:d,recordingSystem:f,game:h,sequence:H,outputFolderPath:m,videoContainer:g,recordingOutput:E,recordAudio:_,hudPosition:hudPos="top-left",enableSequenceTransitions:enTrans=!0,enableKillCounter:enKills=!0,enableSlowMotion:enSlow=!0,sequenceKills:seqKills=[],clutches:seqClutches=[]}=t;
+  let{ffmpegExecutablePath:i,framerate:s,targetFramerate:tfInput,tickrate:tk=64,inputParameters:a,videoCodec:c,audioCodec:l,audioBitrate:u,constantRateFactor:A,outputParameters:d,recordingSystem:f,game:h,sequence:H,outputFolderPath:m,videoContainer:g,recordingOutput:E,recordAudio:_,hudPosition:hudPos="top-left",enableSequenceTransitions:enTrans=!0,enableKillCounter:enKills=!0,enableSlowMotion:enSlow=!0,enableFastForward:enFast=!0,sequenceKills:seqKills=[],clutches:seqClutches=[]}=t;
   let tfps=tfInput||Math.min(s,60);
   await pT.default.ensureDir(m);
   let b=fg(m,H,g),tmpHudDir=R_.default.join(m,\`.hud-tmp-\${H.number}\`);
@@ -483,12 +554,44 @@ async function hIe(t,e){
     }
     if(best&&bSc>0){
       let kSec=(best.tick-H.startTick)/Math.max(1,tk),sSt=Math.max(0.2,kSec-0.5),sEn=Math.min(rawSeqDur-0.2,kSec+1);
-      if(sEn-sSt>=0.8)slowMo={startSec:sSt,endSec:sEn,extraSec:sEn-sSt,tick:best.tick};
+      if(sEn-sSt>=0.8)slowMo={startSec:sSt,endSec:sEn,speed:0.5,extraSec:sEn-sSt,tick:best.tick};
     }
   }
-  let hasSlow=Boolean(slowMo),isHighFps=(s>=100||tfps>=100||hasSlow),extraDur=slowMo?.extraSec??0,seqDur=rawSeqDur+extraDur;
+  let ffIntervals=[];
+  if(enFast&&kills.length>1){
+    for(let i=0;i<kills.length-1;i++){
+      let k1=kills[i],k2=kills[i+1];
+      let w1=String(k1.weaponName??k1.weapon_name??"").toLowerCase();
+      let w2=String(k2.weaponName??k2.weapon_name??"").toLowerCase();
+      if(isExcludedWeaponForStreak(w1)||isExcludedWeaponForStreak(w2))continue;
+      let gapSec=(k2.tick-k1.tick)/Math.max(1,tk);
+      if(gapSec>10){
+        let ffSt=(k1.tick-H.startTick)/Math.max(1,tk)+1.2;
+        let ffEn=(k2.tick-H.startTick)/Math.max(1,tk)-2.5;
+        if(ffEn>ffSt+1.5&&ffSt>0.2&&ffEn<rawSeqDur-0.2){
+          ffIntervals.push({startSec:ffSt,endSec:ffEn,speed:2.0});
+        }
+      }
+    }
+  }
+  let speedIntervals=[...ffIntervals];
+  if(slowMo)speedIntervals.push(slowMo);
+  let{segments,totalOutDuration}=buildSpeedSegments(rawSeqDur,speedIntervals);
+  let hasSpeedChanges=segments.some(seg=>seg.speed!==1.0);
+  let isHighFps=(s>=100||tfps>=100||segments.some(seg=>seg.speed===0.5));
+  let seqDur=totalOutDuration;
   let fadeDur=Math.min(0.35,seqDur/4),fadeOutSt=Math.max(0,seqDur-fadeDur);
-  let adjT=t0=>{if(!slowMo)return t0;if(t0<=slowMo.startSec)return t0;if(t0<=slowMo.endSec)return slowMo.startSec+(t0-slowMo.startSec)*2;return t0+slowMo.extraSec};
+  let adjT=t0=>{
+    if(segments.length<=1&&segments[0]?.speed===1.0)return t0;
+    for(let seg of segments){
+      if(t0>=seg.rawStart&&t0<=seg.rawEnd){
+        return seg.outStart+(t0-seg.rawStart)/seg.speed;
+      }
+    }
+    if(t0<segments[0].rawStart)return t0;
+    let last=segments[segments.length-1];
+    return last.outEnd+(t0-last.rawEnd);
+  };
   let buildHud=async()=>{
     await pT.default.ensureDir(tmpHudDir);
     let{boldEsc}=getWinFonts(),hudVf=[],itIdx=0;
@@ -521,6 +624,9 @@ async function hIe(t,e){
             intervals.push({rawStart:kStSec,rawEnd:kEnSec,text:\`\${basePov}  |  \${badge}\`,borderColor:bColor,borderWidth:bWidth});
           }
         }
+        if(ffIntervals.length>0){
+          intervals=splitIntervalsWithFastForward(intervals,ffIntervals,basePov);
+        }
         for(let it of intervals){
           let adjSt=adjT(it.rawStart),adjEn=adjT(it.rawEnd);
           let lblFile=R_.default.join(tmpHudDir,\`hud_\${itIdx++}.txt\`);
@@ -545,24 +651,30 @@ async function hIe(t,e){
   };
   try{
     let hudVf=await buildHud();
-    if(hasSlow&&slowMo){
-      let s1=slowMo.startSec.toFixed(3),s2=slowMo.endSec.toFixed(3);
+    if(hasSpeedChanges&&segments.length>1){
       let slowPtsExpr=(s>=100)?\`setpts=N/(\${tfps}*TB),fps=fps=\${tfps}:round=near\`:\`setpts=2.0*(PTS-STARTPTS),fps=fps=\${tfps}:round=near\`;
-      let vBase=[
-        \`[0:v]trim=start=0:end=\${s1},setpts=PTS-STARTPTS,fps=fps=\${tfps}:round=near[vpre]\`,
-        \`[0:v]trim=start=\${s1}:end=\${s2},\${slowPtsExpr}[vslow]\`,
-        \`[0:v]trim=start=\${s2},setpts=PTS-STARTPTS,fps=fps=\${tfps}:round=near[vpost]\`,
-        \`[vpre][vslow][vpost]concat=n=3:v=1:a=0[vcat]\`
-      ];
+      let vBase=[],aBase=[];
+      for(let j=0;j<segments.length;j++){
+        let seg=segments[j];
+        let sStart=seg.rawStart.toFixed(3),sEnd=seg.rawEnd.toFixed(3);
+        if(seg.speed===2.0){
+          vBase.push(\`[0:v]trim=start=\${sStart}:end=\${sEnd},setpts=0.5*(PTS-STARTPTS),fps=fps=\${tfps}:round=near[v\${j}]\`);
+          aBase.push(\`[1:a]atrim=start=\${sStart}:end=\${sEnd},asetpts=PTS-STARTPTS,atempo=2.0[a\${j}]\`);
+        }else if(seg.speed===0.5){
+          vBase.push(\`[0:v]trim=start=\${sStart}:end=\${sEnd},\${slowPtsExpr}[v\${j}]\`);
+          aBase.push(\`[1:a]atrim=start=\${sStart}:end=\${sEnd},asetpts=PTS-STARTPTS,atempo=0.5[a\${j}]\`);
+        }else{
+          vBase.push(\`[0:v]trim=start=\${sStart}:end=\${sEnd},setpts=PTS-STARTPTS,fps=fps=\${tfps}:round=near[v\${j}]\`);
+          aBase.push(\`[1:a]atrim=start=\${sStart}:end=\${sEnd},asetpts=PTS-STARTPTS[a\${j}]\`);
+        }
+      }
+      let vCatIn=segments.map((_,idx)=>\`[v\${idx}]\`).join("");
+      let aCatIn=segments.map((_,idx)=>\`[a\${idx}]\`).join("");
+      vBase.push(\`\${vCatIn}concat=n=\${segments.length}:v=1:a=0[vcat]\`);
+      aBase.push(\`\${aCatIn}concat=n=\${segments.length}:v=0:a=1[acat]\`);
       let vOut=["setsar=1:1",...hudVf];
       if(enTrans)vOut.push(\`fade=t=in:st=0:d=\${fadeDur.toFixed(2)}\`,\`fade=t=out:st=\${fadeOutSt.toFixed(2)}:d=\${fadeDur.toFixed(2)}\`);
       vOut.push(\`fps=fps=\${tfps}:round=near\`,"format=yuv420p");
-      let aBase=[
-        \`[1:a]atrim=start=0:end=\${s1},asetpts=PTS-STARTPTS[apre]\`,
-        \`[1:a]atrim=start=\${s1}:end=\${s2},asetpts=PTS-STARTPTS,atempo=0.5[aslow]\`,
-        \`[1:a]atrim=start=\${s2},asetpts=PTS-STARTPTS[apost]\`,
-        \`[apre][aslow][apost]concat=n=3:v=0:a=1[acat]\`
-      ];
       let aOut=["aresample=async=1:first_pts=0"];
       if(enTrans)aOut.push(\`afade=t=in:st=0:d=\${fadeDur.toFixed(2)}\`,\`afade=t=out:st=\${fadeOutSt.toFixed(2)}:d=\${fadeDur.toFixed(2)}\`);
       let fullComp=[...vBase,\`[vcat]\${vOut.join(",")}[vout]\`,...aBase,\`[acat]\${aOut.join(",")}[aout]\`].join(";\\n");
@@ -821,7 +933,7 @@ async function Ayt({signal:t,...e}){
   yA(t);
   let{recordingSystem:r,recordingOutput:n,encoderSoftware:o,framerate:i,sequences:s,outputFolderPath:a,concatenateSequences:c,outputFileName:l,ffmpegSettings:u,game:A,onSequenceStart:d,onConcatenateSequencesStart:f}=e;
   let curSet=await he(),vSet=curSet?.video??{};
-  let hudPos=e.hudPosition??vSet.hudPosition??"top-left",showIntro=e.showIntroScreen??vSet.showIntroScreen??!0,showOutro=e.showOutroScreen??vSet.showOutroScreen??!0,showFun=e.showFunAwards??vSet.showFunAwards??!0,enKills=e.enableKillCounter??vSet.enableKillCounter??!0,enSlow=e.enableSlowMotion??vSet.enableSlowMotion??!0,enTrans=e.enableSequenceTransitions??vSet.enableSequenceTransitions??!0;
+  let hudPos=e.hudPosition??vSet.hudPosition??"top-left",showIntro=e.showIntroScreen??vSet.showIntroScreen??!0,showOutro=e.showOutroScreen??vSet.showOutroScreen??!0,showFun=e.showFunAwards??vSet.showFunAwards??!0,enKills=e.enableKillCounter??vSet.enableKillCounter??!0,enSlow=e.enableSlowMotion??vSet.enableSlowMotion??!0,enFast=e.enableFastForward??vSet.enableFastForward??!0,enTrans=e.enableSequenceTransitions??vSet.enableSequenceTransitions??!0;
   let targetFps=i,captureFps=enSlow?Math.max(targetFps*2,120):targetFps;
   let matchCtx=await fetchMatchIntroHudCtx(e.checksum);
   if(matchCtx){
@@ -846,7 +958,7 @@ async function Ayt({signal:t,...e}){
     try{
       let seqKills=(matchCtx?.kills??[]).filter(k=>k.tick>=m.startTick&&k.tick<=m.endTick);
       let seqClutches=(matchCtx?.clutches??[]).filter(cl=>seqKills.some(k=>k.roundNumber===cl.roundNumber&&k.killerSteamId===cl.clutcherSteamId));
-      o===Bs.FFmpeg?await hIe({ffmpegExecutablePath:ffBin,recordingSystem:r,recordingOutput:n,game:A,recordAudio:m.recordAudio,audioBitrate:u.audioBitrate,constantRateFactor:u.constantRateFactor,videoContainer:u.videoContainer,videoCodec:u.videoCodec,audioCodec:u.audioCodec,inputParameters:u.inputParameters,outputParameters:u.outputParameters,framerate:captureFps,targetFramerate:targetFps,tickrate:e.tickrate,outputFolderPath:a,sequence:m,hudPosition:hudPos,enableSequenceTransitions:enTrans,enableKillCounter:enKills,enableSlowMotion:enSlow,sequenceKills:seqKills,clutches:seqClutches},t):await AIe({recordingSystem:r,game:A,recordAudio:m.recordAudio,framerate:captureFps,outputFolderPath:a,sequence:m},t);
+      o===Bs.FFmpeg?await hIe({ffmpegExecutablePath:ffBin,recordingSystem:r,recordingOutput:n,game:A,recordAudio:m.recordAudio,audioBitrate:u.audioBitrate,constantRateFactor:u.constantRateFactor,videoContainer:u.videoContainer,videoCodec:u.videoCodec,audioCodec:u.audioCodec,inputParameters:u.inputParameters,outputParameters:u.outputParameters,framerate:captureFps,targetFramerate:targetFps,tickrate:e.tickrate,outputFolderPath:a,sequence:m,hudPosition:hudPos,enableSequenceTransitions:enTrans,enableKillCounter:enKills,enableSlowMotion:enSlow,enableFastForward:enFast,sequenceKills:seqKills,clutches:seqClutches},t):await AIe({recordingSystem:r,game:A,recordAudio:m.recordAudio,framerate:captureFps,outputFolderPath:a,sequence:m},t);
       completedSeqs.push(m);
     }catch(err){
       if(t.aborted)throw err;
@@ -1145,6 +1257,25 @@ function buildMatchHighlightsSequences({match,steamIds,rounds,weapons,perspectiv
       }
     }
   }
+  for(let seq of mergedRaw){
+    let sKills=match.kills.filter(k=>k.tick>=seq.startTick&&k.tick<=seq.endTick).sort((a,b)=>a.tick-b.tick);
+    let ffIntervals=[];
+    for(let i=0;i<sKills.length-1;i++){
+      let k1=sKills[i],k2=sKills[i+1];
+      let w1=String(k1.weaponName??k1.weapon_name??"").toLowerCase();
+      let w2=String(k2.weaponName??k2.weapon_name??"").toLowerCase();
+      if(isExcludedWeaponForStreak(w1)||isExcludedWeaponForStreak(w2))continue;
+      let gapSec=(k2.tick-k1.tick)/tickrate;
+      if(gapSec>10){
+        let ffSt=k1.tick+Math.round(tickrate*1.2);
+        let ffEn=k2.tick-Math.round(tickrate*2.5);
+        if(ffEn>ffSt+Math.round(tickrate*1.5)){
+          ffIntervals.push({startTick:ffSt,endTick:ffEn,speed:2.0});
+        }
+      }
+    }
+    seq.fastForwardIntervals=ffIntervals;
+  }
   return mergedRaw.map((seq,index)=>({
     number:firstSequenceNumber+index,
     startTick:seq.startTick,
@@ -1158,6 +1289,7 @@ function buildMatchHighlightsSequences({match,steamIds,rounds,weapons,perspectiv
     playerVoicesEnabled:settings.playerVoicesEnabled,
     playersOptions:buildPlayersOptions(match.players,seq.playerCameras.map(c=>c.playerSteamId).filter(Boolean)),
     playerCameras:seq.playerCameras,
+    fastForwardIntervals:seq.fastForwardIntervals||[],
     cameras:[]
   }));
 }
@@ -1189,6 +1321,7 @@ function GenerateMatchHighlightsDialog(){
   let[showFunAwards,setShowFunAwards]=(0,W.useState)(settings.showFunAwards??!0);
   let[enableKillCounter,setEnableKillCounter]=(0,W.useState)(settings.enableKillCounter??!0);
   let[enableSlowMotion,setEnableSlowMotion]=(0,W.useState)(settings.enableSlowMotion??!0);
+  let[enableFastForward,setEnableFastForward]=(0,W.useState)(settings.enableFastForward??!0);
   let[enableSequenceTransitions,setEnableSequenceTransitions]=(0,W.useState)(settings.enableSequenceTransitions??!0);
   let[specialFilters,setSpecialFilters]=(0,W.useState)({onlyHeadshot:!1,onlyNoScope:!1,onlyThroughSmoke:!1,onlyWallbang:!1,onlyAirborne:!1,onlyBlind:!1,onlyEntryKill:!1,onlyUtilityOrKnife:!1,onlyTradeKill:!1,onlyBombAction:!1,mode:"bonus"});
   let[startSecondsBeforeEvent,setStartSecondsBeforeEvent]=(0,W.useState)(3);
@@ -1230,10 +1363,10 @@ function GenerateMatchHighlightsDialog(){
   let applyTimelineAndRecordNow=async()=>{
     if(finalSequences.length===0||isStartingRecording)return;
     setIsStartingRecording(!0);
-    await updateSettings({concatenateSequences:!0,hideGameWindow,hudPosition,showIntroScreen,showOutroScreen,showFunAwards,enableKillCounter,enableSlowMotion,enableSequenceTransitions});
+    await updateSettings({concatenateSequences:!0,hideGameWindow,hudPosition,showIntroScreen,showOutroScreen,showFunAwards,enableKillCounter,enableSlowMotion,enableFastForward,enableSequenceTransitions});
     dispatch(Fs({demoFilePath:match.demoFilePath,sequences:finalSequences}));
     try{
-      let payload={...settings,concatenateSequences:!0,hideGameWindow,hudPosition,showIntroScreen,showOutroScreen,showFunAwards,enableKillCounter,enableSlowMotion,enableSequenceTransitions,checksum:match.checksum,game:match.game,tickrate:match.tickrate,demoPath:match.demoFilePath,mapName:match.mapName,sequences:finalSequences};
+      let payload={...settings,concatenateSequences:!0,hideGameWindow,hudPosition,showIntroScreen,showOutroScreen,showFunAwards,enableKillCounter,enableSlowMotion,enableFastForward,enableSequenceTransitions,checksum:match.checksum,game:match.game,tickrate:match.tickrate,demoPath:match.demoFilePath,mapName:match.mapName,sequences:finalSequences};
       await client.send({name:Lg.AddVideoToQueue,payload});
       await client.send({name:Lg.ResumeVideoQueue});
       hideDialog();
@@ -1318,6 +1451,7 @@ function GenerateMatchHighlightsDialog(){
         (0,Q.jsx)(Checkbox,{label:"Incluir tela de introdução no início do vídeo (8s com Mapa, Placar Final e Tabela KDA dos Times)",isChecked:showIntroScreen,onChange:async e=>{let c=e.target.checked;setShowIntroScreen(c);await updateSettings({showIntroScreen:c});}}),
         (0,Q.jsx)(Checkbox,{label:"Incluir tela de encerramento no final do vídeo (Outro com MVP e Destaques da Partida)",isChecked:showOutroScreen,onChange:async e=>{let c=e.target.checked;setShowOutroScreen(c);await updateSettings({showOutroScreen:c});}}),
         (0,Q.jsx)(Checkbox,{label:"Sempre incluir abates coringas (No-Scope, Faca, Zeus, Collat SSG 08 e 1-2 Tiros Seguidos - isentos de filtros)",isChecked:alwaysIncludeWildcardKills,onChange:e=>setAlwaysIncludeWildcardKills(e.target.checked)}),
+        (0,Q.jsx)(Checkbox,{label:"Avanço rápido (2x) em esperas longas (> 10s) entre abates (exceto SSG 08, Negev e M249)",isChecked:enableFastForward,onChange:async e=>{let c=e.target.checked;setEnableFastForward(c);await updateSettings({enableFastForward:c});}}),
         (0,Q.jsx)(Checkbox,{label:"Troféus engraçados da partida no encerramento (Destaque cômico para todos os jogadores: Porta da Esperança, Cearense Lover, Bob Marley, Pikachu, etc.)",isChecked:showFunAwards,onChange:async e=>{let c=e.target.checked;setShowFunAwards(c);await updateSettings({showFunAwards:c});}}),
         (0,Q.jsx)(Checkbox,{label:"Transição suave (Fade-In / Fade-Out em vídeo e áudio) entre uma sequência e outra",isChecked:enableSequenceTransitions,onChange:async e=>{let c=e.target.checked;setEnableSequenceTransitions(c);await updateSettings({enableSequenceTransitions:c});}})
       ]}),
