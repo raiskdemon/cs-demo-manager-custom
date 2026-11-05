@@ -1,5 +1,96 @@
 function isHumanSteamIdForAi(id){let s=String(id??"");return s!==""&&s!=="0"&&s.length>5}
 function aiKillPointsByCount(n){let table=[0,10,28,50,78,110,140,170,200,230,260];return n<=10?table[n]:260+(n-10)*30}
+function isAutoWeaponForStreak(w){
+  let name=String(w||"").toLowerCase();
+  return ["ak-47","m4a4","m4a1-s","galil ar","famas","aug","sg 553","negev","m249","mp9","mac-10","mp7","mp5-sd","ump-45","p90","bizon"].some(x=>name.includes(x));
+}
+function detectConsecutiveOneShots(kills,shots,damages){
+  let result=new Map();
+  if(!Array.isArray(shots)||shots.length===0||!Array.isArray(kills)||kills.length===0)return result;
+  let gunShots=shots.filter(s=>{
+    let w=String(s.weapon_name??s.weaponName??"").toLowerCase();
+    return !["knife","bayonet","karambit","dagger","flashbang","smoke","hegrenade","molotov","incendiary","decoy"].some(x=>w.includes(x));
+  });
+  let shotsByPlayerRound=new Map();
+  for(let s of gunShots){
+    let rnd=s.round_number??s.roundNumber;
+    let sid=s.player_steam_id??s.playerSteamId;
+    if(!rnd||!sid)continue;
+    let key=`${rnd}:${sid}`;
+    let l=shotsByPlayerRound.get(key);
+    l?l.push(s):shotsByPlayerRound.set(key,[s]);
+  }
+  let hitCountMap=new Map();
+  for(let d of (damages||[])){
+    let rnd=d.round_number??d.roundNumber;
+    let att=d.attacker_steam_id??d.attackerSteamId;
+    let vic=d.victim_steam_id??d.victimSteamId;
+    if(!rnd||!att||!vic)continue;
+    let key=`${rnd}:${att}:${vic}`;
+    hitCountMap.set(key,(hitCountMap.get(key)??0)+1);
+  }
+  for(let [key,pShots] of shotsByPlayerRound.entries()){
+    let[rndStr,sid]=key.split(":");
+    let rnd=Number(rndStr);
+    let pKills=kills.filter(k=>(k.round_number??k.roundNumber)===rnd&&(k.killer_steam_id??k.killerSteamId)===sid);
+    if(pKills.length<2)continue;
+    let killsByTick=new Map();
+    for(let k of pKills){
+      let tk=Number(k.tick);
+      let l=killsByTick.get(tk);
+      l?l.push(k):killsByTick.set(tk,[k]);
+    }
+    let streak=[];
+    let flush=()=>{
+      if(streak.length>=2){
+        let first=streak[0];
+        let prevShot=first.shotIndex>0?pShots[first.shotIndex-1]:null;
+        let ticksBefore=prevShot?(Number(first.shot.tick)-Number(prevShot.tick)):9999;
+        let firstW=first.shot.weapon_name??first.shot.weaponName;
+        if(!(isAutoWeaponForStreak(firstW)&&ticksBefore<16)){
+          let valid=[first];
+          for(let i=1;i<streak.length;i++){
+            let cur=streak[i],prev=valid[valid.length-1];
+            let dt=Number(cur.shot.tick)-Number(prev.shot.tick);
+            let curW=cur.shot.weapon_name??cur.shot.weaponName;
+            if(isAutoWeaponForStreak(curW)&&dt<14)break;
+            if(dt>960)break;
+            valid.push(cur);
+          }
+          if(valid.length>=2){
+            let ok=!0;
+            for(let it of valid){
+              for(let k of it.kills){
+                let kRnd=k.round_number??k.roundNumber;
+                let kAtt=k.killer_steam_id??k.killerSteamId;
+                let kVic=k.victim_steam_id??k.victimSteamId;
+                let hits=hitCountMap.get(`${kRnd}:${kAtt}:${kVic}`);
+                if(hits!==void 0&&hits>1){ok=!1;break}
+              }
+              if(!ok)break;
+            }
+            if(ok){
+              let streakLen=valid.reduce((acc,v)=>acc+v.kills.length,0);
+              let order=1;
+              for(let it of valid){
+                for(let k of it.kills){
+                  result.set(k.id,{isOneShotStreak:!0,streakLength:streakLen,streakIndex:order++,weaponName:it.shot.weapon_name??it.shot.weaponName});
+                }
+              }
+            }
+          }
+        }
+      }
+      streak=[];
+    };
+    for(let i=0;i<pShots.length;i++){
+      let s=pShots[i],tk=Number(s.tick),ks=killsByTick.get(tk);
+      ks&&ks.length>0?streak.push({shotIndex:i,shot:s,kills:ks}):flush();
+    }
+    flush();
+  }
+  return result;
+}
 function isWildcardKillForAi(k){
   if(!k)return!1;
   let w=String(k.weaponName??k.weapon_name??"").toLowerCase();
@@ -8,7 +99,8 @@ function isWildcardKillForAi(k){
   let isZeus=w.includes("taser")||w.includes("zeus");
   let isNs=Boolean(k.isNoScope??k.is_no_scope);
   let isSsgCollat=Boolean(k.isSsgCollat);
-  return isNs||isKnife||isZeus||isSsgCollat;
+  let isOneShot=Boolean(k.isOneShotStreak);
+  return isNs||isKnife||isZeus||isSsgCollat||isOneShot;
 }
 function buildAiHighlightsCandidates({match,steamIds,startSecondsBeforeEvent=3,endSecondsAfterEvent=2}){
   let tr=match.tickrate>0?match.tickrate:64,before=Math.round(tr*startSecondsBeforeEvent),after=Math.round(tr*endSecondsAfterEvent),maxTick=match.tickCount>0?match.tickCount:Number.MAX_SAFE_INTEGER;
@@ -24,6 +116,15 @@ function buildAiHighlightsCandidates({match,steamIds,startSecondsBeforeEvent=3,e
     let key=`${k.roundNumber}:${k.killerSteamId}:${k.tick}`;
     if((ssgCollatTickMap.get(key)??0)>=2){
       k.isSsgCollat=!0;
+    }
+  }
+  let oneShotStreaks=detectConsecutiveOneShots(match.kills||[],match.shots||[],match.damages||[]);
+  for(let k of match.kills||[]){
+    let info=oneShotStreaks.get(k.id);
+    if(info){
+      k.isOneShotStreak=!0;
+      k.oneShotStreakLen=info.streakLength;
+      k.oneShotStreakIdx=info.streakIndex;
     }
   }
   let kills=[...(match.kills||[])].sort((a,b)=>a.tick-b.tick);
@@ -65,7 +166,7 @@ function buildAiHighlightsCandidates({match,steamIds,startSecondsBeforeEvent=3,e
         if(avg<=1.2)rapid=22*(n-1);else if(avg<=2.5)rapid=14*(n-1);else if(avg<=4)rapid=6*(n-1);
       }
       score+=rapid;
-      let hs=0,ns=0,sm=0,wb=0,air=0,bl=0,kn=0,zeus=0,ut=0,en=0,ssgCollat=0;
+      let hs=0,ns=0,sm=0,wb=0,air=0,bl=0,kn=0,zeus=0,ut=0,en=0,ssgCollat=0,oneShot=0;
       for(let k of ks){
         let w=String(k.weaponName??k.weapon_name??"").toLowerCase();
         let wt=String(k.weaponType??k.weapon_type??"").toLowerCase();
@@ -73,6 +174,7 @@ function buildAiHighlightsCandidates({match,steamIds,startSecondsBeforeEvent=3,e
         let isZeus=w.includes("taser")||w.includes("zeus");
         let isNs=Boolean(k.isNoScope??k.is_no_scope);
         let isSsgCollat=Boolean(k.isSsgCollat);
+        let isOneShot=Boolean(k.isOneShotStreak);
         k.isHeadshot&&hs++;
         isNs&&ns++;
         k.isThroughSmoke&&sm++;
@@ -82,17 +184,18 @@ function buildAiHighlightsCandidates({match,steamIds,startSecondsBeforeEvent=3,e
         isKnife&&kn++;
         isZeus&&zeus++;
         isSsgCollat&&ssgCollat++;
+        isOneShot&&oneShot++;
         (wt==="grenade"||wt==="equipment")&&!isZeus&&ut++;
         firstKillIdPerRound.get(k.roundNumber)===k.id&&en++;
       }
-      score+=hs*3+ns*20+sm*9+wb*9+air*12+bl*12+kn*25+zeus*25+ssgCollat*35+ut*12+en*5;
-      let isWildcard=(ns>0||kn>0||zeus>0||ssgCollat>0);
+      score+=hs*3+ns*20+sm*9+wb*9+air*12+bl*12+kn*25+zeus*25+ssgCollat*35+oneShot*30+ut*12+en*5;
+      let isWildcard=(ns>0||kn>0||zeus>0||ssgCollat>0||oneShot>=2);
       let clutch=clutches.get(`${first.roundNumber}:${first.killerSteamId}`),clutchBonus=0;
       if(clutch&&last.tick>=clutch.tick-tr*2){clutchBonus=18*(clutch.opponentCount||1);score+=clutchBonus;tags.push(`Clutch 1v${clutch.opponentCount}`)}
       let r=roundsMap.get(first.roundNumber);
       r&&r.winnerName&&first.killerTeamName&&r.winnerName===first.killerTeamName&&(score+=6);
       first.roundNumber===lastRoundNumber&&(score+=10,tags.push("Último round"));
-      let special=ns+sm+wb+air+bl+kn+zeus+ut+ssgCollat;
+      let special=ns+sm+wb+air+bl+kn+zeus+ut+ssgCollat+oneShot;
       if(n<2&&special===0&&clutchBonus===0&&!isWildcard)continue;
       rapid>0&&tags.unshift(n>=2&&span/(n-1)<=1.2?"Relâmpago":"Rápido");
       hs>0&&tags.push(`${hs} HS`);
@@ -104,12 +207,13 @@ function buildAiHighlightsCandidates({match,steamIds,startSecondsBeforeEvent=3,e
       kn>0&&tags.push(kn>1?`${kn} Faca`:"Faca");
       zeus>0&&tags.push(zeus>1?`${zeus} Zeus`:"Zeus");
       ssgCollat>0&&tags.push(ssgCollat>2?`${Math.floor(ssgCollat/2)+1}x Collat SSG 08`:"Collat SSG 08");
+      oneShot>=2&&tags.push(oneShot>2?`${oneShot}x 1 Tiro`:"2x 1 Tiro");
       ut>0&&tags.push("Utilitário");
       en>0&&tags.push("Entry");
       let startTick=Math.max(1,first.tick-before),endTick=Math.min(maxTick,last.tick+after);
       if(clutchBonus>0)endTick=Math.min(maxTick,endTick+Math.round(tr));
       let player=(match.players||[]).find(p=>p.steamId===first.killerSteamId);
-      candidates.push({steamId:first.killerSteamId,playerName:player?.name??first.killerName??"",roundNumber:first.roundNumber,kills:n,score:Math.round(score),startTick,endTick,seconds:(endTick-startTick)/tr,isWildcard,wildcardCount:(ns+kn+zeus+ssgCollat),description:`${n}K${tags.length>0?" • "+tags.join(", "):""}`});
+      candidates.push({steamId:first.killerSteamId,playerName:player?.name??first.killerName??"",roundNumber:first.roundNumber,kills:n,score:Math.round(score),startTick,endTick,seconds:(endTick-startTick)/tr,isWildcard,wildcardCount:(ns+kn+zeus+ssgCollat+oneShot),description:`${n}K${tags.length>0?" • "+tags.join(", "):""}`});
     }
   }
   return candidates;
@@ -251,7 +355,7 @@ function GenerateAiHighlightsDialog(){
   return(0,Q.jsxs)(Dialog$1,{onEnterPressed:applyTimelineOnly,children:[
     (0,Q.jsx)(DialogHeader,{children:(0,Q.jsx)(DialogTitle,{children:"Highlights Automáticos (IA escolhe os melhores lances)"})}),
     (0,Q.jsx)(DialogContent,{children:(0,Q.jsxs)("div",{className:"flex w-[680px] max-h-[78vh] overflow-y-auto flex-col gap-y-12 pr-4",children:[
-      (0,Q.jsx)("p",{className:"text-caption",children:"A seleção analisa todos os abates da partida e dá uma nota para cada lance: quantidade de abates no mesmo boneco, velocidade da sequência, clutches, abates coringas (no-scope, faca, zeus e collat ssg 08), headshots, wallbang, smoke, entry e rounds decisivos. Os lances coringas são garantidos no vídeo mesmo se ultrapassarem o tempo máximo."}),
+      (0,Q.jsx)("p",{className:"text-caption",children:"A seleção analisa todos os abates da partida e dá uma nota para cada lance: quantidade de abates no mesmo boneco, velocidade da sequência, clutches, abates coringas (no-scope, faca, zeus, collat ssg 08 e 1 tiro 2+ kills), headshots, wallbang, smoke, entry e rounds decisivos. Os lances coringas são garantidos no vídeo mesmo se ultrapassarem o tempo máximo."}),
       (0,Q.jsxs)("div",{className:"flex flex-col gap-y-8",children:[
         (0,Q.jsxs)("div",{className:"flex items-center gap-x-8",children:[
           (0,Q.jsx)("span",{className:"text-body-strong",children:"Jogadores considerados:"}),
@@ -266,7 +370,7 @@ function GenerateAiHighlightsDialog(){
         (0,Q.jsx)(Select$1,{label:"Posição do nome (POV: Jogador - Round X)",options:hudPositionOptions,value:hudPosition,onChange:setHudPosition})
       ]}),
       (0,Q.jsxs)("div",{className:"flex flex-col gap-y-8 rounded-4 border border-gray-400 p-8",children:[
-        (0,Q.jsx)(Checkbox,{label:"Sempre incluir abates coringas (No-Scope, Faca, Zeus e Collat SSG 08 - isentos do limite de tempo)",isChecked:alwaysIncludeWildcardKills,onChange:e=>setAlwaysIncludeWildcardKills(e.target.checked)}),
+        (0,Q.jsx)(Checkbox,{label:"Sempre incluir abates coringas (No-Scope, Faca, Zeus, Collat SSG 08 e 1 Tiro 2+ Kills - isentos do limite de tempo)",isChecked:alwaysIncludeWildcardKills,onChange:e=>setAlwaysIncludeWildcardKills(e.target.checked)}),
         (0,Q.jsx)(Checkbox,{label:"Contador de kills animado no HUD (1K, Double, Triple, Ace, Clutches e Armas)",isChecked:enableKillCounter,onChange:e=>setEnableKillCounter(e.target.checked)}),
         (0,Q.jsx)(Checkbox,{label:"Câmera lenta (Slow Motion 0.5x) em abates épicos (No-Scope, Faca, Wallbang e Clutches)",isChecked:enableSlowMotion,onChange:e=>setEnableSlowMotion(e.target.checked)}),
         (0,Q.jsx)(Checkbox,{label:"Tela de introdução de 8s (Mapa, Placar Final e KDA dos jogadores)",isChecked:showIntroScreen,onChange:e=>setShowIntroScreen(e.target.checked)}),
