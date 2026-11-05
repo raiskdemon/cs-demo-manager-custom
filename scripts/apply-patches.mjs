@@ -603,8 +603,31 @@ serverJs = replaceExact(serverJs, oldConcatFn, newConcatFn, 'concatenateVideosFr
 
 const oldBuildVideosFn = `async function Ayt({signal:t,...e}){yA(t);let{recordingSystem:r,recordingOutput:n,encoderSoftware:o,framerate:i,sequences:s,outputFolderPath:a,concatenateSequences:c,outputFileName:l,ffmpegSettings:u,game:A,onSequenceStart:d,onConcatenateSequencesStart:f}=e;for(let[H,m]of s.entries())d(m.number,H+1),o===Bs.FFmpeg?await hIe({ffmpegExecutablePath:Ks(u.customExecutableLocation)?await Bl():u.customExecutableLocation,recordingSystem:r,recordingOutput:n,game:A,recordAudio:m.recordAudio,audioBitrate:u.audioBitrate,constantRateFactor:u.constantRateFactor,videoContainer:u.videoContainer,videoCodec:u.videoCodec,audioCodec:u.audioCodec,inputParameters:u.inputParameters,outputParameters:u.outputParameters,framerate:i,outputFolderPath:a,sequence:m},t):await AIe({recordingSystem:r,game:A,recordAudio:m.recordAudio,framerate:i,outputFolderPath:a,sequence:m},t);if(c&&s.length>1){f();let H=T_e(l,{mapName:e.mapName,checksum:e.checksum,game:e.game,encoderSoftware:e.encoderSoftware,width:e.width,height:e.height,framerate:e.framerate});await mIe({ffmpegExecutablePath:Ks(u.customExecutableLocation)?await Bl():u.customExecutableLocation,outputFolderPath:a,sequences:s,videoContainer:u.videoContainer,fileName:H},t)}}`;
 
-const newBuildVideosFn = `async function fetchMatchIntroHudCtx(checksum){
+const newBuildVideosFn = `async function reconcileMatchPlayerTeams(checksum){
   try{
+    let econRows=await I.selectFrom("player_economies as pe")
+      .innerJoin("rounds as r",j=>j.onRef("r.match_checksum","=","pe.match_checksum").onRef("r.number","=","pe.round_number"))
+      .select(["pe.player_steam_id as sid","r.team_a_name as teamA","r.team_b_name as teamB","pe.player_side as side","r.team_a_side as sideA","r.team_b_side as sideB"])
+      .where("pe.match_checksum","=",checksum)
+      .where("pe.player_steam_id","!=","0")
+      .execute();
+    if(!econRows||econRows.length===0)return;
+    let counts=new Map(),tNames={teamA:econRows[0].teamA,teamB:econRows[0].teamB};
+    for(let row of econRows){
+      if(!counts.has(row.sid))counts.set(row.sid,{a:0,b:0});
+      let c=counts.get(row.sid);
+      if(row.side===row.sideA)c.a++;
+      else if(row.side===row.sideB)c.b++;
+    }
+    for(let[sid,c]of counts.entries()){
+      let trueTeam=c.a>=c.b?tNames.teamA:tNames.teamB;
+      await I.updateTable("players").set({team_name:trueTeam}).where("match_checksum","=",checksum).where("steam_id","=",sid).execute();
+    }
+  }catch(e){logger.warn("reconcileMatchPlayerTeams error:",e)}
+}
+async function fetchMatchIntroHudCtx(checksum){
+  try{
+    await reconcileMatchPlayerTeams(checksum);
     let isHumanId=id=>{let s=String(id??"");return s!==""&&s!=="0"&&s.length>5};
     let[demoRow,teamRows,playerRows,roundRows,killRows,clutchRows]=await Promise.all([
       I.selectFrom("demos").select(["date","map_name"]).where("checksum","=",checksum).executeTakeFirst(),
@@ -727,6 +750,15 @@ async function Ayt({signal:t,...e}){
 }`;
 
 serverJs = replaceExact(serverJs, oldBuildVideosFn, newBuildVideosFn, 'buildVideos (Ayt)');
+
+// 3.5 Patch _L and gQ to reconcile player teams
+const oldInsertCsvEnd = `eCe({demoName:i,databaseSettings:o,outputFolderPath:r})])}catch(n){throw await m_([t]),n}`;
+const newInsertCsvEnd = `eCe({demoName:i,databaseSettings:o,outputFolderPath:r})]);await reconcileMatchPlayerTeams(t)}catch(n){throw await m_([t]),n}`;
+serverJs = replaceExact(serverJs, oldInsertCsvEnd, newInsertCsvEnd, 'reconcile player teams on demo insert (_L)');
+
+const oldGqFetch = `for(let o of e){let{checksum:i,comment:s}=o,[a,c]=await Promise.all([sQ(i),aQ(i)])`;
+const newGqFetch = `for(let o of e){let{checksum:i,comment:s}=o;await reconcileMatchPlayerTeams(i);let[a,c]=await Promise.all([sQ(i),aQ(i)])`;
+serverJs = replaceExact(serverJs, oldGqFetch, newGqFetch, 'reconcile player teams on match fetch (gQ)');
 
 // 4. Patch launchParameters and background hidden window mode in BT (HLAE) and hn (startCounterStrike) in server.js
 const psHideScript = `Add-Type -Name Win32Hide -Namespace CsDm -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);'; for ($i = 0; $i -lt 50; $i++) { $procs = Get-Process -Name "csgo","cs2" -ErrorAction SilentlyContinue; foreach ($p in $procs) { if ($p.MainWindowHandle -ne [IntPtr]::Zero) { [CsDm.Win32Hide]::SetWindowPos($p.MainWindowHandle, [IntPtr]1, -32000, -32000, 0, 0, 0x0011) | Out-Null } }; Start-Sleep -Milliseconds 500 }`;
