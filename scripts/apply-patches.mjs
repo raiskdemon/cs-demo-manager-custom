@@ -108,6 +108,7 @@ function getKillBadge(n){
 }
 function getWpBadge(k){
   let w=String(k.weaponName??"").toLowerCase();
+  if(k.isSsgCollat)return" • COLLAT SCOUT";
   if(w.includes("taser")||w.includes("zeus"))return" • ZEUS";
   if(k.weaponType==="knife"||w.includes("knife")||w.includes("bayonet"))return" • FACA";
   if(k.isNoScope)return" • NO-SCOPE";
@@ -372,6 +373,7 @@ async function hIe(t,e){
       let wName=String(k.weaponName??"").toLowerCase();
       let sc=0;
       if(k.isNoScope)sc+=50;
+      if(k.isSsgCollat)sc+=55;
       if(k.weaponType==="knife"||wName.includes("knife")||wName.includes("bayonet"))sc+=60;
       if(wName.includes("taser")||wName.includes("zeus"))sc+=60;
       if((k.penetratedObjects??0)>=2)sc+=40;
@@ -522,6 +524,16 @@ async function hIe(t,e){
 }
 function computeFunPlayerAwards(players,kills,clutches,mapName){
   let cleanMap=(mapName||"").toLowerCase();
+  let ssgCollatMap=new Map();
+  for(let k of kills){
+    let w=String(k.weapon_name??k.weaponName??"").toLowerCase();
+    let sid=String(k.killer_steam_id??k.killerSteamId??"");
+    let rnd=k.round_number??k.roundNumber;
+    if((w.includes("ssg")||w.includes("scout"))&&sid){
+      let key=\`\${rnd}:\${sid}:\${k.tick}\`;
+      ssgCollatMap.set(key,(ssgCollatMap.get(key)??0)+1);
+    }
+  }
   let playerStats=players.map(p=>{
     let sid=String(p.steamId??"");
     let pKills=kills.filter(k=>String(k.killer_steam_id??"")===sid);
@@ -541,8 +553,12 @@ function computeFunPlayerAwards(players,kills,clutches,mapName){
     let trd=pKills.filter(k=>Boolean(k.is_trade_kill)).length;
     let clCount=clutches.filter(c=>String(c.clutcher_steam_id??"")===sid&&c.won).length;
     let blndDeaths=pDeaths.filter(k=>Boolean(k.is_victim_blinded)).length;
+    let ssgCollat=pKills.filter(k=>{
+      let rnd=k.round_number??k.roundNumber;
+      return (ssgCollatMap.get(\`\${rnd}:\${sid}:\${k.tick}\`)??0)>=2;
+    }).length;
     let hsPct=totalK>0?Math.round((hs/totalK)*100):0,wbPct=totalK>0?Math.round((wb/totalK)*100):0,snpPct=totalK>0?Math.round((snp/totalK)*100):0;
-    return{player:p,sid,name:p.name||"Jogador",totalK,totalD,ast,wb,wbPct,hs,hsPct,smk,zeus,knf,snp,snpPct,ns,blnd,air,grn,bot,trd,clCount,blndDeaths};
+    return{player:p,sid,name:p.name||"Jogador",totalK,totalD,ast,wb,wbPct,hs,hsPct,smk,zeus,knf,snp,snpPct,ns,blnd,air,grn,bot,trd,clCount,blndDeaths,ssgCollat};
   });
   let pool=[];
   for(let s of playerStats){
@@ -559,6 +575,7 @@ function computeFunPlayerAwards(players,kills,clutches,mapName){
     if(s.snp>=3&&s.snpPct>=35)cands.push({id:"handicap",badge:"Handicap 💺",title:"Trofeu Handicap 💺",desc:\`So mata sentadinho: \${s.snp} kills de AWP/Sniper\`,score:80+s.snp*4});
     if(s.blnd>=1)cands.push({id:"pombo_cego",badge:"Pombo Cego 🕊️",title:"Trofeu Pombo Cego 🕊️",desc:\`\${s.blnd} kill(s) no escuro total (100% cego)\`,score:90+s.blnd*12});
     if(s.air>=1)cands.push({id:"saci_perere",badge:"Saci Perere 🦘",title:"Trofeu Saci Perere 🦘",desc:\`\${s.air} kill(s) voando pelo mapa no ar\`,score:85+s.air*12});
+    if(s.ssgCollat>=1)cands.push({id:"dois_coelhos",badge:"Dois Coelhos 🐇",title:"Trofeu Dois Coelhos 🐇",desc:\`2 em 1: collat com 1 tiro de Scout (\${s.ssgCollat}x)\`,score:130+s.ssgCollat*25});
     if(s.ns>=1)cands.push({id:"no_scope",badge:"Sem Mira 🎯",title:"Trofeu Sem Mira 🎯",desc:\`\${s.ns} no-scope(s) de sniper a queima-roupa\`,score:85+s.ns*10});
     if(s.grn>=1)cands.push({id:"churrasqueiro",badge:"Churrasqueiro 🔥",title:"Trofeu Churrasqueiro 🔥",desc:\`\${s.grn} assado(s) na molotov ou HE\`,score:80+s.grn*10});
     if(s.clCount>=1)cands.push({id:"clutcher",badge:"Clutcher de Aco 🦾",title:"Trofeu Clutcher de Aco 🦾",desc:\`Gelo no sangue: venceu \${s.clCount} clutch(es)\`,score:100+s.clCount*20});
@@ -637,9 +654,14 @@ async function fetchMatchIntroHudCtx(checksum){
       I.selectFrom("kills").select(["id","tick","round_number","killer_steam_id","killer_name","killer_team_name","victim_steam_id","victim_name","victim_team_name","assister_steam_id","assister_team_name","weapon_name","weapon_type","is_headshot","is_no_scope","is_through_smoke","penetrated_objects","is_killer_controlling_bot","is_killer_airborne","is_killer_blinded","is_victim_blinded","is_trade_kill"]).where("match_checksum","=",checksum).orderBy("tick","asc").execute(),
       I.selectFrom("clutches").select(["round_number","tick","clutcher_steam_id","clutcher_name","opponent_count","won"]).where("match_checksum","=",checksum).execute().catch(()=>[])
     ]);
-    let kMap=new Map(),dMap=new Map(),aMap=new Map(),humKMap=new Map(),botKMap=new Map(),hsMap=new Map();
+    let kMap=new Map(),dMap=new Map(),aMap=new Map(),humKMap=new Map(),botKMap=new Map(),hsMap=new Map(),ssgCollatMap=new Map();
     for(let k of killRows){
       let kid=String(k.killer_steam_id??""),vid=String(k.victim_steam_id??""),aid=String(k.assister_steam_id??"");
+      let kw=String(k.weapon_name??"").toLowerCase();
+      if((kw.includes("ssg")||kw.includes("scout"))&&kid){
+        let kKey=\`\${k.round_number}:\${kid}:\${k.tick}\`;
+        ssgCollatMap.set(kKey,(ssgCollatMap.get(kKey)??0)+1);
+      }
       if(kid&&kid!=="0"&&kid!==vid&&(!k.killer_team_name||!k.victim_team_name||k.killer_team_name!==k.victim_team_name)){
         kMap.set(kid,(kMap.get(kid)??0)+1);
         if(isHumanId(vid)&&!/^bot\\b/i.test(k.victim_name||""))humKMap.set(kid,(humKMap.get(kid)??0)+1);
@@ -678,7 +700,7 @@ async function fetchMatchIntroHudCtx(checksum){
       teamBScore:Number(tB.score??0),
       players:playerRows.map(p=>{let sid=String(p.steam_id??"");return{steamId:sid,name:p.name,teamName:p.team_name,killCount:Math.max(Number(p.kill_count??0),kMap.get(sid)??0),deathCount:Math.max(Number(p.death_count??0),dMap.get(sid)??0),assistCount:Math.max(Number(p.assist_count??0),aMap.get(sid)??0),isBot:!1}}),
       rounds:roundRows.map(r=>({number:Number(r.number),startTick:Number(r.start_tick),endTick:Number(r.end_tick)})),
-      kills:killRows.map(k=>({id:k.id,tick:Number(k.tick),roundNumber:Number(k.round_number),killerSteamId:k.killer_steam_id??void 0,killerName:k.killer_name??void 0,killerTeamName:k.killer_team_name??void 0,victimSteamId:k.victim_steam_id??void 0,victimName:k.victim_name??void 0,victimTeamName:k.victim_team_name??void 0,weaponName:k.weapon_name??void 0,weaponType:k.weapon_type??void 0,isHeadshot:Boolean(k.is_headshot),isNoScope:Boolean(k.is_no_scope),isThroughSmoke:Boolean(k.is_through_smoke),penetratedObjects:Number(k.penetrated_objects??0),isKillerControllingBot:Boolean(k.is_killer_controlling_bot)})),
+      kills:killRows.map(k=>({id:k.id,tick:Number(k.tick),roundNumber:Number(k.round_number),killerSteamId:k.killer_steam_id??void 0,killerName:k.killer_name??void 0,killerTeamName:k.killer_team_name??void 0,victimSteamId:k.victim_steam_id??void 0,victimName:k.victim_name??void 0,victimTeamName:k.victim_team_name??void 0,weaponName:k.weapon_name??void 0,weaponType:k.weapon_type??void 0,isHeadshot:Boolean(k.is_headshot),isNoScope:Boolean(k.is_no_scope),isThroughSmoke:Boolean(k.is_through_smoke),penetratedObjects:Number(k.penetrated_objects??0),isKillerControllingBot:Boolean(k.is_killer_controlling_bot),isSsgCollat:(ssgCollatMap.get(\`\${k.round_number}:\${k.killer_steam_id}:\${k.tick}\`)??0)>=2})),
       clutches:(clutchRows||[]).map(c=>({roundNumber:Number(c.round_number),tick:Number(c.tick??0),clutcherSteamId:c.clutcher_steam_id??void 0,clutcherName:c.clutcher_name??void 0,opponentCount:Number(c.opponent_count??1),won:Boolean(c.won)})),
       mvp:topMvp,
       highlights:outroHighlights,
@@ -822,10 +844,25 @@ function isWildcardKill(kill){
   let isKnife=wt==="knife"||w.includes("knife")||w.includes("bayonet")||w.includes("karambit")||w.includes("dagger");
   let isZeus=w.includes("taser")||w.includes("zeus");
   let isNs=Boolean(kill.isNoScope??kill.is_no_scope);
-  return isNs||isKnife||isZeus;
+  let isSsgCollat=Boolean(kill.isSsgCollat);
+  return isNs||isKnife||isZeus||isSsgCollat;
 }
 function buildMatchHighlightsSequences({match,steamIds,rounds,weapons,perspective,minKillsInRound,lifeMode,includeClutches,minClutchOpponents,guaranteeAllPlayers,minSequencesPerPlayer,adaptiveThresholdForLowFraggers,specialFilters,startSecondsBeforeEvent,endSecondsAfterEvent,maxSecondsBetweenEvents,settings,firstSequenceNumber,rapidKillsEnabled=!1,rapidMinKills=3,rapidWindowSeconds=5,alwaysIncludeWildcardKills=!0,maxVideoMinutes=0}){
   if(steamIds.length===0||match.kills.length===0)return[];
+  let ssgCollatTickMap=new Map();
+  for(let k of match.kills||[]){
+    let w=String(k.weaponName??k.weapon_name??"").toLowerCase();
+    if((w.includes("ssg")||w.includes("scout"))&&k.killerSteamId){
+      let key=\`\${k.roundNumber}:\${k.killerSteamId}:\${k.tick}\`;
+      ssgCollatTickMap.set(key,(ssgCollatTickMap.get(key)??0)+1);
+    }
+  }
+  for(let k of match.kills||[]){
+    let key=\`\${k.roundNumber}:\${k.killerSteamId}:\${k.tick}\`;
+    if((ssgCollatTickMap.get(key)??0)>=2){
+      k.isSsgCollat=!0;
+    }
+  }
   let firstKillIdPerRound=new Map(),bombActionPlayersPerRound=new Set();
   if(Array.isArray(match.bombsPlanted)){
     for(let p of match.bombsPlanted)bombActionPlayersPerRound.add(\`\${p.roundNumber}:\${p.planterSteamId}\`);
@@ -1157,7 +1194,7 @@ function GenerateMatchHighlightsDialog(){
         (0,Q.jsx)(Checkbox,{label:"Câmera lenta (Slow Motion 0.5x em 120 FPS) em abates épicos (No-Scope, Faca, Wallbang e Clutches)",isChecked:enableSlowMotion,onChange:async e=>{let c=e.target.checked;setEnableSlowMotion(c);await updateSettings({enableSlowMotion:c});}}),
         (0,Q.jsx)(Checkbox,{label:"Incluir tela de introdução no início do vídeo (8s com Mapa, Placar Final e Tabela KDA dos Times)",isChecked:showIntroScreen,onChange:async e=>{let c=e.target.checked;setShowIntroScreen(c);await updateSettings({showIntroScreen:c});}}),
         (0,Q.jsx)(Checkbox,{label:"Incluir tela de encerramento no final do vídeo (Outro com MVP e Destaques da Partida)",isChecked:showOutroScreen,onChange:async e=>{let c=e.target.checked;setShowOutroScreen(c);await updateSettings({showOutroScreen:c});}}),
-        (0,Q.jsx)(Checkbox,{label:"Sempre incluir abates coringas (No-Scope, Faca e Zeus - isentos de filtros)",isChecked:alwaysIncludeWildcardKills,onChange:e=>setAlwaysIncludeWildcardKills(e.target.checked)}),
+        (0,Q.jsx)(Checkbox,{label:"Sempre incluir abates coringas (No-Scope, Faca, Zeus e Collat SSG 08 - isentos de filtros)",isChecked:alwaysIncludeWildcardKills,onChange:e=>setAlwaysIncludeWildcardKills(e.target.checked)}),
         (0,Q.jsx)(Checkbox,{label:"Troféus engraçados da partida no encerramento (Destaque cômico para todos os jogadores: Porta da Esperança, Cearense Lover, Bob Marley, Pikachu, etc.)",isChecked:showFunAwards,onChange:async e=>{let c=e.target.checked;setShowFunAwards(c);await updateSettings({showFunAwards:c});}}),
         (0,Q.jsx)(Checkbox,{label:"Transição suave (Fade-In / Fade-Out em vídeo e áudio) entre uma sequência e outra",isChecked:enableSequenceTransitions,onChange:async e=>{let c=e.target.checked;setEnableSequenceTransitions(c);await updateSettings({enableSequenceTransitions:c});}})
       ]}),

@@ -7,10 +7,25 @@ function isWildcardKillForAi(k){
   let isKnife=wt==="knife"||w.includes("knife")||w.includes("bayonet")||w.includes("karambit")||w.includes("dagger");
   let isZeus=w.includes("taser")||w.includes("zeus");
   let isNs=Boolean(k.isNoScope??k.is_no_scope);
-  return isNs||isKnife||isZeus;
+  let isSsgCollat=Boolean(k.isSsgCollat);
+  return isNs||isKnife||isZeus||isSsgCollat;
 }
 function buildAiHighlightsCandidates({match,steamIds,startSecondsBeforeEvent=3,endSecondsAfterEvent=2}){
   let tr=match.tickrate>0?match.tickrate:64,before=Math.round(tr*startSecondsBeforeEvent),after=Math.round(tr*endSecondsAfterEvent),maxTick=match.tickCount>0?match.tickCount:Number.MAX_SAFE_INTEGER;
+  let ssgCollatTickMap=new Map();
+  for(let k of match.kills||[]){
+    let w=String(k.weaponName??k.weapon_name??"").toLowerCase();
+    if((w.includes("ssg")||w.includes("scout"))&&k.killerSteamId){
+      let key=`${k.roundNumber}:${k.killerSteamId}:${k.tick}`;
+      ssgCollatTickMap.set(key,(ssgCollatTickMap.get(key)??0)+1);
+    }
+  }
+  for(let k of match.kills||[]){
+    let key=`${k.roundNumber}:${k.killerSteamId}:${k.tick}`;
+    if((ssgCollatTickMap.get(key)??0)>=2){
+      k.isSsgCollat=!0;
+    }
+  }
   let kills=[...(match.kills||[])].sort((a,b)=>a.tick-b.tick);
   if(kills.length===0)return[];
   let allowed=Array.isArray(steamIds)&&steamIds.length>0?new Set(steamIds):null;
@@ -50,13 +65,14 @@ function buildAiHighlightsCandidates({match,steamIds,startSecondsBeforeEvent=3,e
         if(avg<=1.2)rapid=22*(n-1);else if(avg<=2.5)rapid=14*(n-1);else if(avg<=4)rapid=6*(n-1);
       }
       score+=rapid;
-      let hs=0,ns=0,sm=0,wb=0,air=0,bl=0,kn=0,zeus=0,ut=0,en=0;
+      let hs=0,ns=0,sm=0,wb=0,air=0,bl=0,kn=0,zeus=0,ut=0,en=0,ssgCollat=0;
       for(let k of ks){
         let w=String(k.weaponName??k.weapon_name??"").toLowerCase();
         let wt=String(k.weaponType??k.weapon_type??"").toLowerCase();
         let isKnife=wt==="knife"||w.includes("knife")||w.includes("bayonet")||w.includes("karambit")||w.includes("dagger");
         let isZeus=w.includes("taser")||w.includes("zeus");
         let isNs=Boolean(k.isNoScope??k.is_no_scope);
+        let isSsgCollat=Boolean(k.isSsgCollat);
         k.isHeadshot&&hs++;
         isNs&&ns++;
         k.isThroughSmoke&&sm++;
@@ -65,17 +81,18 @@ function buildAiHighlightsCandidates({match,steamIds,startSecondsBeforeEvent=3,e
         k.isKillerBlinded&&bl++;
         isKnife&&kn++;
         isZeus&&zeus++;
+        isSsgCollat&&ssgCollat++;
         (wt==="grenade"||wt==="equipment")&&!isZeus&&ut++;
         firstKillIdPerRound.get(k.roundNumber)===k.id&&en++;
       }
-      score+=hs*3+ns*20+sm*9+wb*9+air*12+bl*12+kn*25+zeus*25+ut*12+en*5;
-      let isWildcard=(ns>0||kn>0||zeus>0);
+      score+=hs*3+ns*20+sm*9+wb*9+air*12+bl*12+kn*25+zeus*25+ssgCollat*35+ut*12+en*5;
+      let isWildcard=(ns>0||kn>0||zeus>0||ssgCollat>0);
       let clutch=clutches.get(`${first.roundNumber}:${first.killerSteamId}`),clutchBonus=0;
       if(clutch&&last.tick>=clutch.tick-tr*2){clutchBonus=18*(clutch.opponentCount||1);score+=clutchBonus;tags.push(`Clutch 1v${clutch.opponentCount}`)}
       let r=roundsMap.get(first.roundNumber);
       r&&r.winnerName&&first.killerTeamName&&r.winnerName===first.killerTeamName&&(score+=6);
       first.roundNumber===lastRoundNumber&&(score+=10,tags.push("Último round"));
-      let special=ns+sm+wb+air+bl+kn+zeus+ut;
+      let special=ns+sm+wb+air+bl+kn+zeus+ut+ssgCollat;
       if(n<2&&special===0&&clutchBonus===0&&!isWildcard)continue;
       rapid>0&&tags.unshift(n>=2&&span/(n-1)<=1.2?"Relâmpago":"Rápido");
       hs>0&&tags.push(`${hs} HS`);
@@ -86,12 +103,13 @@ function buildAiHighlightsCandidates({match,steamIds,startSecondsBeforeEvent=3,e
       bl>0&&tags.push("Cego");
       kn>0&&tags.push(kn>1?`${kn} Faca`:"Faca");
       zeus>0&&tags.push(zeus>1?`${zeus} Zeus`:"Zeus");
+      ssgCollat>0&&tags.push(ssgCollat>2?`${Math.floor(ssgCollat/2)+1}x Collat SSG 08`:"Collat SSG 08");
       ut>0&&tags.push("Utilitário");
       en>0&&tags.push("Entry");
       let startTick=Math.max(1,first.tick-before),endTick=Math.min(maxTick,last.tick+after);
       if(clutchBonus>0)endTick=Math.min(maxTick,endTick+Math.round(tr));
       let player=(match.players||[]).find(p=>p.steamId===first.killerSteamId);
-      candidates.push({steamId:first.killerSteamId,playerName:player?.name??first.killerName??"",roundNumber:first.roundNumber,kills:n,score:Math.round(score),startTick,endTick,seconds:(endTick-startTick)/tr,isWildcard,wildcardCount:(ns+kn+zeus),description:`${n}K${tags.length>0?" • "+tags.join(", "):""}`});
+      candidates.push({steamId:first.killerSteamId,playerName:player?.name??first.killerName??"",roundNumber:first.roundNumber,kills:n,score:Math.round(score),startTick,endTick,seconds:(endTick-startTick)/tr,isWildcard,wildcardCount:(ns+kn+zeus+ssgCollat),description:`${n}K${tags.length>0?" • "+tags.join(", "):""}`});
     }
   }
   return candidates;
@@ -233,7 +251,7 @@ function GenerateAiHighlightsDialog(){
   return(0,Q.jsxs)(Dialog$1,{onEnterPressed:applyTimelineOnly,children:[
     (0,Q.jsx)(DialogHeader,{children:(0,Q.jsx)(DialogTitle,{children:"Highlights Automáticos (IA escolhe os melhores lances)"})}),
     (0,Q.jsx)(DialogContent,{children:(0,Q.jsxs)("div",{className:"flex w-[680px] max-h-[78vh] overflow-y-auto flex-col gap-y-12 pr-4",children:[
-      (0,Q.jsx)("p",{className:"text-caption",children:"A seleção analisa todos os abates da partida e dá uma nota para cada lance: quantidade de abates no mesmo boneco, velocidade da sequência, clutches, abates coringas (no-scope, faca e zeus), headshots, wallbang, smoke, entry e rounds decisivos. Os lances coringas são garantidos no vídeo mesmo se ultrapassarem o tempo máximo."}),
+      (0,Q.jsx)("p",{className:"text-caption",children:"A seleção analisa todos os abates da partida e dá uma nota para cada lance: quantidade de abates no mesmo boneco, velocidade da sequência, clutches, abates coringas (no-scope, faca, zeus e collat ssg 08), headshots, wallbang, smoke, entry e rounds decisivos. Os lances coringas são garantidos no vídeo mesmo se ultrapassarem o tempo máximo."}),
       (0,Q.jsxs)("div",{className:"flex flex-col gap-y-8",children:[
         (0,Q.jsxs)("div",{className:"flex items-center gap-x-8",children:[
           (0,Q.jsx)("span",{className:"text-body-strong",children:"Jogadores considerados:"}),
@@ -248,7 +266,7 @@ function GenerateAiHighlightsDialog(){
         (0,Q.jsx)(Select$1,{label:"Posição do nome (POV: Jogador - Round X)",options:hudPositionOptions,value:hudPosition,onChange:setHudPosition})
       ]}),
       (0,Q.jsxs)("div",{className:"flex flex-col gap-y-8 rounded-4 border border-gray-400 p-8",children:[
-        (0,Q.jsx)(Checkbox,{label:"Sempre incluir abates coringas (No-Scope, Faca e Zeus - isentos do limite de tempo)",isChecked:alwaysIncludeWildcardKills,onChange:e=>setAlwaysIncludeWildcardKills(e.target.checked)}),
+        (0,Q.jsx)(Checkbox,{label:"Sempre incluir abates coringas (No-Scope, Faca, Zeus e Collat SSG 08 - isentos do limite de tempo)",isChecked:alwaysIncludeWildcardKills,onChange:e=>setAlwaysIncludeWildcardKills(e.target.checked)}),
         (0,Q.jsx)(Checkbox,{label:"Contador de kills animado no HUD (1K, Double, Triple, Ace, Clutches e Armas)",isChecked:enableKillCounter,onChange:e=>setEnableKillCounter(e.target.checked)}),
         (0,Q.jsx)(Checkbox,{label:"Câmera lenta (Slow Motion 0.5x) em abates épicos (No-Scope, Faca, Wallbang e Clutches)",isChecked:enableSlowMotion,onChange:e=>setEnableSlowMotion(e.target.checked)}),
         (0,Q.jsx)(Checkbox,{label:"Tela de introdução de 8s (Mapa, Placar Final e KDA dos jogadores)",isChecked:showIntroScreen,onChange:e=>setShowIntroScreen(e.target.checked)}),
