@@ -287,6 +287,24 @@ function getWpBadge(k){
   if(k.isThroughSmoke)return" • SMOKE";
   return"";
 }
+function getCircusMusicPath(){
+  let csdmPath=R_.default.join(jt(),"circus.mp3");
+  if(pT.default.existsSync(csdmPath))return csdmPath;
+  let staticPath=R_.default.join(Ki(),"sounds","circus.mp3");
+  if(pT.default.existsSync(staticPath))return staticPath;
+  let asarAssetPath=R_.default.join(__dirname,"assets","circus.mp3");
+  if(pT.default.existsSync(asarAssetPath)){
+    try{
+      let buf=pT.default.readFileSync(asarAssetPath);
+      pT.default.writeFileSync(csdmPath,buf);
+      return csdmPath;
+    }catch(e){
+      return asarAssetPath;
+    }
+  }
+  return "";
+}
+
 async function generateIntroVideoWithFFmpeg(cfg,signal){
   let{ffmpegExecutablePath:i,game:h,mapName,matchDate,teamAName,teamAScore,teamBName,teamBScore,players,width,height,framerate:s,outputFolderPath:m,videoContainer:g,videoCodec:c,constantRateFactor:A,audioBitrate:u,outputParameters:d,isLowlight=!1}=cfg;
   let INTRO_DUR=8;
@@ -410,11 +428,22 @@ async function generateIntroVideoWithFFmpeg(cfg,signal){
     );
     let filterFile=R_.default.join(tmpDir,"intro_filter.txt");
     await pT.default.writeFile(filterFile,fp.join(","),"utf8");
+    let circusPath=isLowlight?getCircusMusicPath():"";
     let args=["-y"];
     if(mapImg)args.push(\`-i "\${mapImg}"\`);else args.push(\`-f lavfi -i "color=c=0x111827:s=\${w}x\${ht}:r=\${s}"\`);
+    if(isLowlight&&circusPath){
+      args.push(
+        \`-ss 0 -t \${INTRO_DUR} -i "\${circusPath}"\`,
+        \`-filter_script:v "\${filterFile}"\`,
+        \`-af "afade=t=in:st=0:d=0.5,afade=t=out:st=\${(INTRO_DUR-0.6).toFixed(1)}:d=0.6,volume=0.85"\`
+      );
+    }else{
+      args.push(
+        '-f lavfi -i "anullsrc=channel_layout=stereo:sample_rate=44100"',
+        \`-filter_script:v "\${filterFile}"\`
+      );
+    }
     args.push(
-      '-f lavfi -i "anullsrc=channel_layout=stereo:sample_rate=44100"',
-      \`-filter_script:v "\${filterFile}"\`,
       ...getVidCodecArgs(c,A,d,!0),
       "-c:a aac",
       \`-b:a \${u}K\`,
@@ -428,6 +457,66 @@ async function generateIntroVideoWithFFmpeg(cfg,signal){
   }finally{
     await pT.default.remove(tmpDir).catch(()=>{});
   }
+}
+
+function getFunnyBagreExcuse(topBagre){
+  let list=[];
+  if(topBagre.whiffs>=1){
+    list.push(
+      '"Na minha tela pegou 4 na cabeca! Esse 64 tick e piada!"',
+      '"O mousepad ta mais engordurado que pastel de feira"',
+      '"Certeza que o cara tava de anti-aim, dei 30 tiros nele"',
+      '"Minha sensibilidade desconfigurou sozinha bem na hora do spray"'
+    );
+  }
+  if(topBagre.knifeZeusVictim>=1){
+    list.push(
+      '"Fui olhar o WhatsApp no celular e tomei facada nas costas"',
+      '"Achei que o cara com a faca na mao era do meu time"',
+      '"Tava limpando a sujeira da tela e nao vi o cara chegando"'
+    );
+  }
+  if(topBagre.suicides>=1){
+    list.push(
+      '"A molotov quicou na quina de uma parede invisivel"',
+      '"Achei que nao dava dano de queda dali, juro por Deus"',
+      '"Minha granada bateu na nuca do amigo e voltou na minha cara"'
+    );
+  }
+  if(topBagre.blindDeaths>=1){
+    list.push(
+      '"Flash de amigo cega mais que olhar pro Sol ao meio-dia"',
+      '"Minha tela ficou branca e achei que a luz do quarto tinha acabado"',
+      '"Fui inventar de jogar no escuro, tomei flash e fiquei cego de verdade"'
+    );
+  }
+  if(topBagre.clutchesLost>=1){
+    list.push(
+      '"O gato pulou na mesa e mordeu o fio do mouse no 1v1"',
+      '"Meu fone bluetooth desconectou e comecou a tocar funk"',
+      '"A pressao do Discord gritando no meu ouvido me desconcentrou"'
+    );
+  }
+  if(topBagre.inspectDeaths>=1){
+    list.push(
+      '"Tava so conferindo se o float da skin nova valorizou"',
+      '"Fui dar uma inspecionada na faca pra ver o brilho e morri"'
+    );
+  }
+  list.push(
+    '"Minha mae chamou pra almocar bem na hora da troca"',
+    '"Deu uma queda brutal de FPS bem quando abri o pixel, juro!"',
+    '"A cadeira gamer estalou e me deu um susto bem na mira"',
+    '"O botao esquerdo do mouse afundou e nao subiu mais"',
+    '"Meu fone so ta saindo som do lado que nao tinha ninguem"',
+    '"O sol bateu na janela e refletiu direto na minha retina"',
+    '"O teclado comeu a tecla do strafe bem quando fui abrir"',
+    '"Tava com 150 de ping na mente e 20 na tela"'
+  );
+
+  let seed=(topBagre.killCount||0)*17+(topBagre.deathCount||0)*31+(topBagre.failCount||0)*13;
+  let idx=Math.abs(seed)%list.length;
+  return list[idx];
 }
 
 async function generateOutroVideoWithFFmpeg(cfg,signal){
@@ -475,8 +564,9 @@ async function generateOutroVideoWithFFmpeg(cfg,signal){
     let fMvpBot=wTxt("mvp_bot.txt",isLowlight
       ?\`• Trapalhadas na Partida: \${topBagre?.failCount??0} lances epicos\`
       :\`• Kills em Bots Assumidos: \${mvp?.botKills??0}\`);
+    let officialExcuse=isLowlight?getFunnyBagreExcuse(topBagre):"";
     let fMvpHs=wTxt("mvp_hs.txt",isLowlight
-      ?\`• Desculpa Oficial: "Culpa do mousepad e do 64 tick"\`
+      ?\`• Desculpa Oficial: \${officialExcuse}\`
       :\`• Taxa de Headshot: \${mvp?.hsRate??0}%\`);
     let destTitle=isLowlight?"HALL DA VERGONHA & PREMIACOES 🤡":(hasFun?"TROFEUS DA PARTIDA":"DESTAQUES DA PARTIDA");
     let fDestT=wTxt("dest_t.txt",destTitle);
@@ -510,7 +600,7 @@ async function generateOutroVideoWithFFmpeg(cfg,signal){
       \`drawbox=x=\${rx(160)}:y=\${ry(455)}:w=\${rx(735)}:h=1:color=0x374151@0.9:t=fill\`,
       \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpHum}':fontsize=\${ry(25)}:fontcolor=0xe2e8f0:x=\${rx(160)}:y=\${ry(490)}\`,
       \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpBot}':fontsize=\${ry(25)}:fontcolor=0x94a3b8:x=\${rx(160)}:y=\${ry(550)}\`,
-      \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpHs}':fontsize=\${ry(25)}:fontcolor=0xfbbf24:x=\${rx(160)}:y=\${ry(610)}\`,
+      \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpHs}':fontsize=\${ry(23)}:fontcolor=0xfbbf24:x=\${rx(160)}:y=\${ry(610)}\`,
       \`drawbox=x=\${rx(985)}:y=\${ry(180)}:w=\${rx(815)}:h=\${ry(735)}:color=0x0f172ae8:t=fill\`,
       \`drawbox=x=\${rx(985)}:y=\${ry(180)}:w=\${rx(815)}:h=\${ry(58)}:color=\${rightBoxHdrColor}:t=fill\`,
       \`drawbox=x=\${rx(985)}:y=\${ry(180)}:w=\${rx(815)}:h=\${ry(735)}:color=\${rightBoxBorderColor}:t=2\`,
@@ -564,11 +654,22 @@ async function generateOutroVideoWithFFmpeg(cfg,signal){
     );
     let filterFile=R_.default.join(tmpDir,"outro_filter.txt");
     await pT.default.writeFile(filterFile,fp.join(","),"utf8");
+    let circusPath=isLowlight?getCircusMusicPath():"";
     let args=["-y"];
     if(mapImg)args.push(\`-i "\${mapImg}"\`);else args.push(\`-f lavfi -i "color=c=0x111827:s=\${w}x\${ht}:r=\${s}"\`);
+    if(isLowlight&&circusPath){
+      args.push(
+        \`-ss 10 -t \${OUTRO_DUR} -i "\${circusPath}"\`,
+        \`-filter_script:v "\${filterFile}"\`,
+        \`-af "afade=t=in:st=0:d=0.5,afade=t=out:st=\${(OUTRO_DUR-0.6).toFixed(1)}:d=0.6,volume=0.85"\`
+      );
+    }else{
+      args.push(
+        '-f lavfi -i "anullsrc=channel_layout=stereo:sample_rate=44100"',
+        \`-filter_script:v "\${filterFile}"\`
+      );
+    }
     args.push(
-      '-f lavfi -i "anullsrc=channel_layout=stereo:sample_rate=44100"',
-      \`-filter_script:v "\${filterFile}"\`,
       ...getVidCodecArgs(c,A,d,!0),
       "-c:a aac",
       \`-b:a \${u}K\`,
@@ -1154,12 +1255,38 @@ async function Ayt({signal:t,...e}){
   }
   if((c||Boolean(introVideoPath)||Boolean(outroVideoPath))&&completedSeqs.length>0){
     f();
-    let H=T_e(l,{mapName:e.mapName,checksum:e.checksum,game:e.game,encoderSoftware:e.encoderSoftware,width:e.width,height:e.height,framerate:e.framerate});
+    let H=T_e(l,{mapName:e.mapName,checksum:e.checksum,game:e.game,encoderSoftware:e.encoderSoftware,width:e.width,height:e.height,framerate:e.framerate,matchDate:matchCtx?.matchDate||e.matchDate});
     await mIe({ffmpegExecutablePath:ffBin,outputFolderPath:a,sequences:completedSeqs,videoContainer:u.videoContainer,fileName:H,introVideoPath,outroVideoPath},t);
   }
 }`;
 
 serverJs = replaceExact(serverJs, oldBuildVideosFn, newBuildVideosFn, 'buildVideos (Ayt)');
+// 3.6 Patch T_e (date format dd-MM-yyyy + default {date}-{map})
+const oldTe = `function T_e(t,e){if(!t)return"output";let r=new Date,n=t.replace(/\\{map\\}/g,e.mapName).replace(/\\{checksum\\}/g,e.checksum).replace(/\\{game\\}/g,e.game).replace(/\\{date\\}/g,o9(r,"yyyy-MM-dd")).replace(/\\{time\\}/g,o9(r,"HH-mm-ss")).replace(/\\{encoder\\}/g,e.encoderSoftware).replace(/\\{resolution\\}/g,\`\${e.width}x\${e.height}\`).replace(/\\{framerate\\}/g,e.framerate.toString());return n=n.replace(/[<>:"\\\\/|?*]/g,"_"),n=n.trim(),n.length>0?n:"output"}`;
+const newTe = `function T_e(t,e){
+  let tpl=(t&&t!=="output"&&t.trim()!=="")?t.trim():"{date}-{map}";
+  let r=e.matchDate?new Date(e.matchDate):new Date();
+  if(Number.isNaN(r.getTime()))r=new Date();
+  let dd=String(r.getDate()).padStart(2,"0"),mm=String(r.getMonth()+1).padStart(2,"0"),yyyy=r.getFullYear();
+  let dateBR=\`\${dd}-\${mm}-\${yyyy}\`;
+  let n=tpl
+    .replace(/\\{map\\}/g,e.mapName||"unknown")
+    .replace(/\\{checksum\\}/g,e.checksum||"")
+    .replace(/\\{game\\}/g,e.game||"")
+    .replace(/\\{date\\}/g,dateBR)
+    .replace(/\\{time\\}/g,\`\${String(r.getHours()).padStart(2,"0")}-\${String(r.getMinutes()).padStart(2,"0")}-\${String(r.getSeconds()).padStart(2,"0")}\`)
+    .replace(/\\{encoder\\}/g,e.encoderSoftware||"")
+    .replace(/\\{resolution\\}/g,\`\${e.width||1920}x\${e.height||1080}\`)
+    .replace(/\\{framerate\\}/g,(e.framerate||60).toString());
+  n=n.replace(/[<>:"\\\\/|?*]/g,"_").trim();
+  return n.length>0?n:\`\${dateBR}-\${e.mapName||"output"}\`;
+}`;
+serverJs = replaceExact(serverJs, oldTe, newTe, 'T_e (date format dd-MM-yyyy + default {date}-{map})');
+
+const oldServerDefVideo = 'enableSequenceTransitions:!0,outputFileName:"",showXRay:!0';
+const newServerDefVideo = 'enableSequenceTransitions:!0,outputFileName:"{date}-{map}",showXRay:!0';
+serverJs = replaceExact(serverJs, oldServerDefVideo, newServerDefVideo, 'Default video outputFileName in server.js');
+
 
 // 3.5 Patch _L and gQ to reconcile player teams
 const oldInsertCsvEnd = `eCe({demoName:i,databaseSettings:o,outputFolderPath:r})])}catch(n){throw await m_([t]),n}`;
@@ -1691,5 +1818,17 @@ const newMatchVideoToolbar = `children:[T,(0,Q.jsx)(GenerateMatchHighlightsButto
 
 uiJs = replaceExact(uiJs, oldMatchVideoToolbar, newMatchVideoToolbar, 'MatchVideo toolbar');
 
+
+const oldUiDefVideo = 'terRecording:!0,concatenateSequences:!1,outputFileName:``,showXRay:!0';
+const newUiDefVideo = 'terRecording:!0,concatenateSequences:!1,outputFileName:`{date}-{map}`,showXRay:!0';
+uiJs = replaceExact(uiJs, oldUiDefVideo, newUiDefVideo, 'Default video outputFileName in uiJs');
+
+const oldUiOutputInput = 'TextInput,{label:A,defaultValue:x.outputFileName,onBlur:D,placeholder:`output`}';
+const newUiOutputInput = 'TextInput,{label:A,defaultValue:x.outputFileName||"{date}-{map}",onBlur:D,placeholder:`{date}-{map}`}';
+uiJs = replaceExact(uiJs, oldUiOutputInput, newUiOutputInput, 'OutputFileNameInput defaultValue and placeholder');
+
+const oldUiDatePlaceholderDesc = 'case jq.Date:return(0,Q.jsx)(Trans,{id:`wf5SDm`});';
+const newUiDatePlaceholderDesc = 'case jq.Date:return(0,Q.jsx)(`span`,{children:`Data (padrão Brasil dia-mês-ano: 30-10-2026)`});';
+uiJs = replaceExact(uiJs, oldUiDatePlaceholderDesc, newUiDatePlaceholderDesc, 'Date placeholder description');
 fs.writeFileSync(uiJsPath, uiJs, 'utf8');
 console.log('Successfully patched app-extracted/assets/index-CaMMgvc3.js');
