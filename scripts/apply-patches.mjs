@@ -288,7 +288,7 @@ function getWpBadge(k){
   return"";
 }
 async function generateIntroVideoWithFFmpeg(cfg,signal){
-  let{ffmpegExecutablePath:i,game:h,mapName,matchDate,teamAName,teamAScore,teamBName,teamBScore,players,width,height,framerate:s,outputFolderPath:m,videoContainer:g,videoCodec:c,constantRateFactor:A,audioBitrate:u,outputParameters:d}=cfg;
+  let{ffmpegExecutablePath:i,game:h,mapName,matchDate,teamAName,teamAScore,teamBName,teamBScore,players,width,height,framerate:s,outputFolderPath:m,videoContainer:g,videoCodec:c,constantRateFactor:A,audioBitrate:u,outputParameters:d,isLowlight=!1}=cfg;
   let INTRO_DUR=8;
   await pT.default.ensureDir(m);
   let introOut=R_.default.join(m,\`intro-0.\${g}\`),tmpDir=R_.default.join(m,".intro-tmp");
@@ -315,8 +315,10 @@ async function generateIntroVideoWithFFmpeg(cfg,signal){
       return!0;
     });
     let sortKda=(a,b)=>b.killCount!==a.killCount?b.killCount-a.killCount:b.assistCount!==a.assistCount?b.assistCount-a.assistCount:a.deathCount-b.deathCount;
-    let tAPlayers=humanPlayers.filter(p=>p.teamName===teamAName||p.teamName?.toLowerCase()===teamAName?.toLowerCase()).sort(sortKda).slice(0,10);
-    let tBPlayers=humanPlayers.filter(p=>p.teamName===teamBName||p.teamName?.toLowerCase()===teamBName?.toLowerCase()).sort(sortKda).slice(0,10);
+    let sortBagres=(a,b)=>{let da=a.deathCount??0,db=b.deathCount??0;if(db!==da)return db-da;return(parseFloat(a.kd)||0)-(parseFloat(b.kd)||0)};
+    let sortFn=isLowlight?sortBagres:sortKda;
+    let tAPlayers=humanPlayers.filter(p=>p.teamName===teamAName||p.teamName?.toLowerCase()===teamAName?.toLowerCase()).sort(sortFn).slice(0,10);
+    let tBPlayers=humanPlayers.filter(p=>p.teamName===teamBName||p.teamName?.toLowerCase()===teamBName?.toLowerCase()).sort(sortFn).slice(0,10);
     let assigned=new Set([...tAPlayers.map(p=>p.steamId),...tBPlayers.map(p=>p.steamId)]);
     for(let p of humanPlayers){
       if(!assigned.has(p.steamId)){
@@ -324,24 +326,46 @@ async function generateIntroVideoWithFFmpeg(cfg,signal){
         else tBPlayers.push(p);
       }
     }
-    tAPlayers.sort(sortKda);
-    tBPlayers.sort(sortKda);
+    tAPlayers.sort(sortFn);
+    tBPlayers.sort(sortFn);
     let fmtRow=(p,idx)=>{
-      let nm=(p.name||"Jogador").replace(/[\\r\\n\\t]/g," ").trim().slice(0,17).padEnd(18," ");
+      let nm=(p.name||(isLowlight?"Bagre":"Jogador")).replace(/[\\r\\n\\t]/g," ").trim().slice(0,17).padEnd(18," ");
       let k=String(p.killCount??0).padStart(3," "),dt=String(p.deathCount??0).padStart(3," "),as=String(p.assistCount??0).padStart(3," ");
       let kd=((p.killCount??0)/Math.max(1,p.deathCount??0)).toFixed(2).padStart(5," ");
+      if(isLowlight){
+        return\`\${String(idx+1).padStart(2,"0")}. \${nm} \${dt} / \${k} / \${as}  \${kd}\`;
+      }
       return\`\${String(idx+1).padStart(2,"0")}. \${nm} \${k} / \${dt} / \${as}  \${kd}\`;
     };
     let wTxt=(name,txt)=>{let fp=R_.default.join(tmpDir,name);writeCleanTxtSync(fp,txt);return escFfPath(fp)};
-    let hdrTxt=dateStr?\`HIGHLIGHTS DA PARTIDA  •  MAPA: \${cleanMap.toUpperCase()}  •  \${dateStr}\`:\`HIGHLIGHTS DA PARTIDA  •  MAPA: \${cleanMap.toUpperCase()}\`;
+    let hdrTxt=isLowlight
+      ?(dateStr?\`PIORES MOMENTOS (LOWLIGHTS) 🤡  •  MAPA: \${cleanMap.toUpperCase()}  •  \${dateStr}\`:\`PIORES MOMENTOS (LOWLIGHTS) 🤡  •  MAPA: \${cleanMap.toUpperCase()}\`)
+      :(dateStr?\`HIGHLIGHTS DA PARTIDA  •  MAPA: \${cleanMap.toUpperCase()}  •  \${dateStr}\`:\`HIGHLIGHTS DA PARTIDA  •  MAPA: \${cleanMap.toUpperCase()}\`);
     let scoreTxt=\`\${teamAName||"TIME A"}     \${teamAScore??0}   x   \${teamBScore??0}     \${teamBName||"TIME B"}\`;
     let plJog=n=>\`\${n} JOGADOR\${n===1?"":"ES"}\`;
-    let tATitle=\`\${(teamAName||"TIME A").toUpperCase()} (\${plJog(tAPlayers.length)})\`;
-    let tBTitle=\`\${(teamBName||"TIME B").toUpperCase()} (\${plJog(tBPlayers.length)})\`;
-    let colsHdr="#   JOGADOR              K /   D /   A    K/D";
-    let ftrTxt="CS DEMO MANAGER CUSTOM  •  KDA TOTAL DOS JOGADORES (INCLUINDO BOTS ASSUMIDOS)";
+    let tATitle=isLowlight
+      ?\`\${(teamAName||"TIME A").toUpperCase()} - OS MAIORES BAGRES\`
+      :\`\${(teamAName||"TIME A").toUpperCase()} (\${plJog(tAPlayers.length)})\`;
+    let tBTitle=isLowlight
+      ?\`\${(teamBName||"TIME B").toUpperCase()} - OS MAIORES BAGRES\`
+      :\`\${(teamBName||"TIME B").toUpperCase()} (\${plJog(tBPlayers.length)})\`;
+    let colsHdr=isLowlight
+      ?"#   BAGRE                D /   K /   A    K/D"
+      :"#   JOGADOR              K /   D /   A    K/D";
+    let ftrTxt=isLowlight
+      ?"CS DEMO MANAGER CUSTOM  •  RANKING OFICIAL DOS MAIORES BAGRES DA PARTIDA"
+      :"CS DEMO MANAGER CUSTOM  •  KDA TOTAL DOS JOGADORES (INCLUINDO BOTS ASSUMIDOS)";
     let fHdr=wTxt("hdr.txt",hdrTxt),fScore=wTxt("score.txt",scoreTxt),fTaT=wTxt("ta_t.txt",tATitle),fTbT=wTxt("tb_t.txt",tBTitle),fCols=wTxt("cols.txt",colsHdr),fFtr=wTxt("ftr.txt",ftrTxt);
     let maxRows=Math.max(tAPlayers.length,tBPlayers.length,1),rowFs=maxRows>8?ry(20):ry(22),rowStep=maxRows>8?ry(36):ry(42),rowStartY=ry(486);
+    let topBarColor=isLowlight?"0xef4444@0.95":"0xf59e0b@0.95";
+    let hdrColor=isLowlight?"0xf87171":"0xfbbf24";
+    let tABoxHdr=isLowlight?"0x7f1d1de0":"0x1e3a8ae0";
+    let tABoxBorder=isLowlight?"0xef4444@0.7":"0x3b82f6@0.7";
+    let tATitleColor=isLowlight?"0xfca5a5":"0x93c5fd";
+    let tBBoxHdr=isLowlight?"0x7c2d12e0":"0x7c2d12e0";
+    let tBBoxBorder=isLowlight?"0xf97316@0.7":"0xf97316@0.7";
+    let tBTitleColor=isLowlight?"0xfdba74":"0xfdba74";
+    let topRowColor=isLowlight?"0xf87171":"0xfef08a";
     let fp=[
       \`scale=\${w}:\${ht}:force_original_aspect_ratio=increase\`,
       \`crop=\${w}:\${ht}\`,
@@ -349,30 +373,30 @@ async function generateIntroVideoWithFFmpeg(cfg,signal){
       "gblur=sigma=18",
       "eq=brightness=-0.38:saturation=0.8",
       \`drawbox=x=\${rx(120)}:y=\${ry(48)}:w=\${rx(1680)}:h=\${ry(100)}:color=0x0d131fe0:t=fill\`,
-      \`drawbox=x=\${rx(120)}:y=\${ry(145)}:w=\${rx(1680)}:h=\${ry(4)}:color=0xf59e0b@0.95:t=fill\`,
+      \`drawbox=x=\${rx(120)}:y=\${ry(145)}:w=\${rx(1680)}:h=\${ry(4)}:color=\${topBarColor}:t=fill\`,
       \`drawbox=x=\${rx(120)}:y=\${ry(174)}:w=\${rx(1680)}:h=\${ry(148)}:color=0x111827e8:t=fill\`,
       \`drawbox=x=\${rx(120)}:y=\${ry(174)}:w=\${rx(1680)}:h=\${ry(148)}:color=0x374151@0.8:t=2\`,
       \`drawbox=x=\${rx(120)}:y=\${ry(352)}:w=\${rx(815)}:h=\${ry(560)}:color=0x0f172ae0:t=fill\`,
-      \`drawbox=x=\${rx(120)}:y=\${ry(352)}:w=\${rx(815)}:h=\${ry(56)}:color=0x1e3a8ae0:t=fill\`,
-      \`drawbox=x=\${rx(120)}:y=\${ry(352)}:w=\${rx(815)}:h=\${ry(560)}:color=0x3b82f6@0.7:t=2\`,
+      \`drawbox=x=\${rx(120)}:y=\${ry(352)}:w=\${rx(815)}:h=\${ry(56)}:color=\${tABoxHdr}:t=fill\`,
+      \`drawbox=x=\${rx(120)}:y=\${ry(352)}:w=\${rx(815)}:h=\${ry(560)}:color=\${tABoxBorder}:t=2\`,
       \`drawbox=x=\${rx(985)}:y=\${ry(352)}:w=\${rx(815)}:h=\${ry(560)}:color=0x0f172ae0:t=fill\`,
-      \`drawbox=x=\${rx(985)}:y=\${ry(352)}:w=\${rx(815)}:h=\${ry(56)}:color=0x7c2d12e0:t=fill\`,
-      \`drawbox=x=\${rx(985)}:y=\${ry(352)}:w=\${rx(815)}:h=\${ry(560)}:color=0xf97316@0.7:t=2\`,
-      \`drawtext=fontfile='\${boldEsc}':textfile='\${fHdr}':fontsize=\${ry(36)}:fontcolor=0xfbbf24:x=(w-text_w)/2:y=\${ry(82)}\`,
+      \`drawbox=x=\${rx(985)}:y=\${ry(352)}:w=\${rx(815)}:h=\${ry(56)}:color=\${tBBoxHdr}:t=fill\`,
+      \`drawbox=x=\${rx(985)}:y=\${ry(352)}:w=\${rx(815)}:h=\${ry(560)}:color=\${tBBoxBorder}:t=2\`,
+      \`drawtext=fontfile='\${boldEsc}':textfile='\${fHdr}':fontsize=\${ry(36)}:fontcolor=\${hdrColor}:x=(w-text_w)/2:y=\${ry(82)}\`,
       \`drawtext=fontfile='\${boldEsc}':textfile='\${fScore}':fontsize=\${ry(60)}:fontcolor=white:x=(w-text_w)/2:y=\${ry(222)}\`,
-      \`drawtext=fontfile='\${boldEsc}':textfile='\${fTaT}':fontsize=\${ry(27)}:fontcolor=0x93c5fd:x=\${rx(150)}:y=\${ry(368)}\`,
-      \`drawtext=fontfile='\${boldEsc}':textfile='\${fTbT}':fontsize=\${ry(27)}:fontcolor=0xfdba74:x=\${rx(1015)}:y=\${ry(368)}\`,
+      \`drawtext=fontfile='\${boldEsc}':textfile='\${fTaT}':fontsize=\${ry(27)}:fontcolor=\${tATitleColor}:x=\${rx(150)}:y=\${ry(368)}\`,
+      \`drawtext=fontfile='\${boldEsc}':textfile='\${fTbT}':fontsize=\${ry(27)}:fontcolor=\${tBTitleColor}:x=\${rx(1015)}:y=\${ry(368)}\`,
       \`drawtext=fontfile='\${monoEsc}':textfile='\${fCols}':fontsize=\${ry(21)}:fontcolor=0x9ca3af:x=\${rx(150)}:y=\${ry(432)}\`,
       \`drawtext=fontfile='\${monoEsc}':textfile='\${fCols}':fontsize=\${ry(21)}:fontcolor=0x9ca3af:x=\${rx(1015)}:y=\${ry(432)}\`,
       \`drawbox=x=\${rx(145)}:y=\${ry(464)}:w=\${rx(765)}:h=1:color=0x374151@0.9:t=fill\`,
       \`drawbox=x=\${rx(1010)}:y=\${ry(464)}:w=\${rx(765)}:h=1:color=0x374151@0.9:t=fill\`
     ];
     for(let idx=0;idx<tAPlayers.length;idx++){
-      let rf=wTxt(\`ta_\${idx}.txt\`,fmtRow(tAPlayers[idx],idx)),yy=rowStartY+idx*rowStep,col=idx===0?"0xfef08a":"white";
+      let rf=wTxt(\`ta_\${idx}.txt\`,fmtRow(tAPlayers[idx],idx)),yy=rowStartY+idx*rowStep,col=idx===0?topRowColor:"white";
       fp.push(\`drawtext=fontfile='\${monoEsc}':textfile='\${rf}':fontsize=\${rowFs}:fontcolor=\${col}:x=\${rx(150)}:y=\${yy}\`);
     }
     for(let idx=0;idx<tBPlayers.length;idx++){
-      let rf=wTxt(\`tb_\${idx}.txt\`,fmtRow(tBPlayers[idx],idx)),yy=rowStartY+idx*rowStep,col=idx===0?"0xfef08a":"white";
+      let rf=wTxt(\`tb_\${idx}.txt\`,fmtRow(tBPlayers[idx],idx)),yy=rowStartY+idx*rowStep,col=idx===0?topRowColor:"white";
       fp.push(\`drawtext=fontfile='\${monoEsc}':textfile='\${rf}':fontsize=\${rowFs}:fontcolor=\${col}:x=\${rx(1015)}:y=\${yy}\`);
     }
     fp.push(
@@ -405,10 +429,12 @@ async function generateIntroVideoWithFFmpeg(cfg,signal){
     await pT.default.remove(tmpDir).catch(()=>{});
   }
 }
+
 async function generateOutroVideoWithFFmpeg(cfg,signal){
-  let{ffmpegExecutablePath:i,game:h,mapName,teamAName,teamAScore,teamBName,teamBScore,mvp,highlights,showFunAwards=!0,funAwards=[],width,height,framerate:s,outputFolderPath:m,videoContainer:g,videoCodec:c,constantRateFactor:A,audioBitrate:u,outputParameters:d}=cfg;
-  let hasFun=Boolean(showFunAwards&&funAwards&&funAwards.length>0);
-  let OUTRO_DUR=hasFun?7:5;
+  let{ffmpegExecutablePath:i,game:h,mapName,teamAName,teamAScore,teamBName,teamBScore,mvp,highlights,showFunAwards=!0,funAwards=[],width,height,framerate:s,outputFolderPath:m,videoContainer:g,videoCodec:c,constantRateFactor:A,audioBitrate:u,outputParameters:d,isLowlight=!1,lowlightsCtx=null}=cfg;
+  let effectiveAwards=isLowlight?(lowlightsCtx?.awards&&lowlightsCtx.awards.length>0?lowlightsCtx.awards:funAwards):funAwards;
+  let hasFun=Boolean(showFunAwards&&effectiveAwards&&effectiveAwards.length>0);
+  let OUTRO_DUR=hasFun?8:6;
   await pT.default.ensureDir(m);
   let outroOut=R_.default.join(m,\`outro-0.\${g}\`),tmpDir=R_.default.join(m,".outro-tmp");
   await pT.default.ensureDir(tmpDir);
@@ -426,14 +452,44 @@ async function generateOutroVideoWithFFmpeg(cfg,signal){
     let w=Math.max(1280,width||1920),ht=Math.max(720,height||1080),sx=w/1920,sy=ht/1080,rx=v=>Math.round(v*sx),ry=v=>Math.round(v*sy);
     let wTxt=(name,txt)=>{let fp=R_.default.join(tmpDir,name);writeCleanTxtSync(fp,txt);return escFfPath(fp)};
     let winBanner="";
-    if(teamAScore>teamBScore)winBanner=\`VITORIA: \${(teamAName||"TIME A").toUpperCase()} (\${teamAScore} x \${teamBScore})  •  MAPA: \${cleanMap.toUpperCase()}\`;
-    else if(teamBScore>teamAScore)winBanner=\`VITORIA: \${(teamBName||"TIME B").toUpperCase()} (\${teamBScore} x \${teamAScore})  •  MAPA: \${cleanMap.toUpperCase()}\`;
-    else winBanner=\`EMPATE: \${(teamAName||"TIME A").toUpperCase()} \${teamAScore} x \${teamBScore} \${(teamBName||"TIME B").toUpperCase()}  •  MAPA: \${cleanMap.toUpperCase()}\`;
-    let fBanner=wTxt("banner.txt",winBanner),fMvpT=wTxt("mvp_t.txt","MVP DA PARTIDA"),fMvpN=wTxt("mvp_n.txt",(mvp?.name||"Jogador").toUpperCase()),fMvpTm=wTxt("mvp_tm.txt",\`TIME: \${(mvp?.teamName||"EQUIPE").toUpperCase()}\`);
-    let fMvpKda=wTxt("mvp_kda.txt",\`KDA: \${mvp?.killCount??0} / \${mvp?.deathCount??0} / \${mvp?.assistCount??0}  (K/D: \${mvp?.kd??"1.00"})\`);
-    let fMvpHum=wTxt("mvp_hum.txt",\`• Kills em Jogadores Humanos: \${mvp?.humanKills??0}\`),fMvpBot=wTxt("mvp_bot.txt",\`• Kills em Bots Assumidos: \${mvp?.botKills??0}\`),fMvpHs=wTxt("mvp_hs.txt",\`• Taxa de Headshot: \${mvp?.hsRate??0}%\`);
-    let destTitle=hasFun?"TROFEUS DA PARTIDA":"DESTAQUES DA PARTIDA";
-    let fDestT=wTxt("dest_t.txt",destTitle),fFtr=wTxt("ftr.txt","CS DEMO MANAGER CUSTOM  •  OBRIGADO POR ASSISTIR!");
+    if(isLowlight){
+      winBanner=\`PREMIACAO DOS BAGRES 🤡  •  TROFEU BAGRE DE OURO  •  MAPA: \${cleanMap.toUpperCase()}\`;
+    }else if(teamAScore>teamBScore){
+      winBanner=\`VITORIA: \${(teamAName||"TIME A").toUpperCase()} (\${teamAScore} x \${teamBScore})  •  MAPA: \${cleanMap.toUpperCase()}\`;
+    }else if(teamBScore>teamAScore){
+      winBanner=\`VITORIA: \${(teamBName||"TIME B").toUpperCase()} (\${teamBScore} x \${teamAScore})  •  MAPA: \${cleanMap.toUpperCase()}\`;
+    }else{
+      winBanner=\`EMPATE: \${(teamAName||"TIME A").toUpperCase()} \${teamAScore} x \${teamBScore} \${(teamBName||"TIME B").toUpperCase()}  •  MAPA: \${cleanMap.toUpperCase()}\`;
+    }
+    let topBagre=lowlightsCtx?.topBagre;
+    let fBanner=wTxt("banner.txt",winBanner);
+    let fMvpT=wTxt("mvp_t.txt",isLowlight?"TROFEU BAGRE DE OURO 🤡":"MVP DA PARTIDA");
+    let fMvpN=wTxt("mvp_n.txt",(isLowlight?(topBagre?.name||"BAGRE"):(mvp?.name||"Jogador")).toUpperCase());
+    let fMvpTm=wTxt("mvp_tm.txt",isLowlight?\`TIME: \${(topBagre?.teamName||"EQUIPE").toUpperCase()}  •  INIMIGO DA VITORIA\`:\`TIME: \${(mvp?.teamName||"EQUIPE").toUpperCase()}\`);
+    let fMvpKda=wTxt("mvp_kda.txt",isLowlight
+      ?\`KDA: \${topBagre?.killCount??0} / \${topBagre?.deathCount??0} / \${topBagre?.assistCount??0}  (K/D: \${topBagre?.kd??"0.00"})\`
+      :\`KDA: \${mvp?.killCount??0} / \${mvp?.deathCount??0} / \${mvp?.assistCount??0}  (K/D: \${mvp?.kd??"1.00"})\`);
+    let fMvpHum=wTxt("mvp_hum.txt",isLowlight
+      ?\`• Mortes Sofridas: \${topBagre?.deathCount??0}\`
+      :\`• Kills em Jogadores Humanos: \${mvp?.humanKills??0}\`);
+    let fMvpBot=wTxt("mvp_bot.txt",isLowlight
+      ?\`• Trapalhadas na Partida: \${topBagre?.failCount??0} lances epicos\`
+      :\`• Kills em Bots Assumidos: \${mvp?.botKills??0}\`);
+    let fMvpHs=wTxt("mvp_hs.txt",isLowlight
+      ?\`• Desculpa Oficial: "Culpa do mousepad e do 64 tick"\`
+      :\`• Taxa de Headshot: \${mvp?.hsRate??0}%\`);
+    let destTitle=isLowlight?"HALL DA VERGONHA & PREMIACOES 🤡":(hasFun?"TROFEUS DA PARTIDA":"DESTAQUES DA PARTIDA");
+    let fDestT=wTxt("dest_t.txt",destTitle);
+    let fFtr=wTxt("ftr.txt",isLowlight
+      ?"CS DEMO MANAGER CUSTOM  •  JOGARAM COMO NUNCA, PERDERAM COMO SEMPRE!"
+      :"CS DEMO MANAGER CUSTOM  •  OBRIGADO POR ASSISTIR!");
+    let bannerBarColor=isLowlight?"0xef4444@0.95":"0xf59e0b@0.95";
+    let bannerFontColor=isLowlight?"0xf87171":"0xfbbf24";
+    let leftBoxHdrColor=isLowlight?"0x7f1d1de0":"0x1e3a8ae0";
+    let leftBoxBorderColor=isLowlight?"0xef4444@0.7":"0x3b82f6@0.7";
+    let leftNameColor=isLowlight?"0xf87171":"0xfef08a";
+    let rightBoxHdrColor=isLowlight?"0x7c2d12e0":"0x7c2d12e0";
+    let rightBoxBorderColor=isLowlight?"0xf97316@0.7":"0xf97316@0.7";
     let fp=[
       \`scale=\${w}:\${ht}:force_original_aspect_ratio=increase\`,
       \`crop=\${w}:\${ht}\`,
@@ -441,13 +497,13 @@ async function generateOutroVideoWithFFmpeg(cfg,signal){
       "gblur=sigma=18",
       "eq=brightness=-0.38:saturation=0.8",
       \`drawbox=x=\${rx(120)}:y=\${ry(48)}:w=\${rx(1680)}:h=\${ry(100)}:color=0x0d131fe0:t=fill\`,
-      \`drawbox=x=\${rx(120)}:y=\${ry(145)}:w=\${rx(1680)}:h=\${ry(4)}:color=0xf59e0b@0.95:t=fill\`,
-      \`drawtext=fontfile='\${boldEsc}':textfile='\${fBanner}':fontsize=\${ry(36)}:fontcolor=0xfbbf24:x=(w-text_w)/2:y=\${ry(82)}\`,
+      \`drawbox=x=\${rx(120)}:y=\${ry(145)}:w=\${rx(1680)}:h=\${ry(4)}:color=\${bannerBarColor}:t=fill\`,
+      \`drawtext=fontfile='\${boldEsc}':textfile='\${fBanner}':fontsize=\${ry(36)}:fontcolor=\${bannerFontColor}:x=(w-text_w)/2:y=\${ry(82)}\`,
       \`drawbox=x=\${rx(120)}:y=\${ry(180)}:w=\${rx(815)}:h=\${ry(735)}:color=0x0f172ae8:t=fill\`,
-      \`drawbox=x=\${rx(120)}:y=\${ry(180)}:w=\${rx(815)}:h=\${ry(58)}:color=0x1e3a8ae0:t=fill\`,
-      \`drawbox=x=\${rx(120)}:y=\${ry(180)}:w=\${rx(815)}:h=\${ry(735)}:color=0x3b82f6@0.7:t=2\`,
+      \`drawbox=x=\${rx(120)}:y=\${ry(180)}:w=\${rx(815)}:h=\${ry(58)}:color=\${leftBoxHdrColor}:t=fill\`,
+      \`drawbox=x=\${rx(120)}:y=\${ry(180)}:w=\${rx(815)}:h=\${ry(735)}:color=\${leftBoxBorderColor}:t=2\`,
       \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpT}':fontsize=\${ry(28)}:fontcolor=0xfbbf24:x=\${rx(160)}:y=\${ry(195)}\`,
-      \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpN}':fontsize=\${ry(42)}:fontcolor=0xfef08a:x=\${rx(160)}:y=\${ry(270)}\`,
+      \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpN}':fontsize=\${ry(42)}:fontcolor=\${leftNameColor}:x=\${rx(160)}:y=\${ry(270)}\`,
       \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpTm}':fontsize=\${ry(24)}:fontcolor=0x93c5fd:x=\${rx(160)}:y=\${ry(325)}\`,
       \`drawbox=x=\${rx(160)}:y=\${ry(370)}:w=\${rx(735)}:h=1:color=0x374151@0.9:t=fill\`,
       \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpKda}':fontsize=\${ry(28)}:fontcolor=white:x=\${rx(160)}:y=\${ry(400)}\`,
@@ -456,32 +512,33 @@ async function generateOutroVideoWithFFmpeg(cfg,signal){
       \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpBot}':fontsize=\${ry(25)}:fontcolor=0x94a3b8:x=\${rx(160)}:y=\${ry(550)}\`,
       \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpHs}':fontsize=\${ry(25)}:fontcolor=0xfbbf24:x=\${rx(160)}:y=\${ry(610)}\`,
       \`drawbox=x=\${rx(985)}:y=\${ry(180)}:w=\${rx(815)}:h=\${ry(735)}:color=0x0f172ae8:t=fill\`,
-      \`drawbox=x=\${rx(985)}:y=\${ry(180)}:w=\${rx(815)}:h=\${ry(58)}:color=0x7c2d12e0:t=fill\`,
-      \`drawbox=x=\${rx(985)}:y=\${ry(180)}:w=\${rx(815)}:h=\${ry(735)}:color=0xf97316@0.7:t=2\`,
+      \`drawbox=x=\${rx(985)}:y=\${ry(180)}:w=\${rx(815)}:h=\${ry(58)}:color=\${rightBoxHdrColor}:t=fill\`,
+      \`drawbox=x=\${rx(985)}:y=\${ry(180)}:w=\${rx(815)}:h=\${ry(735)}:color=\${rightBoxBorderColor}:t=2\`,
       \`drawtext=fontfile='\${boldEsc}':textfile='\${fDestT}':fontsize=\${ry(28)}:fontcolor=0xfbbf24:x=\${rx(1025)}:y=\${ry(195)}\`
     ];
     if(hasFun){
-      if(funAwards.length<=5){
-        for(let idx=0;idx<funAwards.length;idx++){
-          let item=funAwards[idx],destY=ry(265)+idx*ry(115);
-          let fTrophy=wTxt(\`fa_t_\${idx}.txt\`,\`\${item.trophy} - \${item.playerName}\`),fDesc=wTxt(\`fa_d_\${idx}.txt\`,item.desc);
+      let awardsList=effectiveAwards;
+      if(awardsList.length<=5){
+        for(let idx=0;idx<awardsList.length;idx++){
+          let item=awardsList[idx],destY=ry(265)+idx*ry(115);
+          let fTrophy=wTxt(\`fa_t_\${idx}.txt\`,\`\${item.trophy||item.badge} - \${item.playerName}\`),fDesc=wTxt(\`fa_d_\${idx}.txt\`,item.desc);
           fp.push(
             \`drawtext=fontfile='\${emojiEsc}':textfile='\${fTrophy}':fontsize=\${ry(25)}:fontcolor=0xfdba74:x=\${rx(1025)}:y=\${destY}\`,
             \`drawtext=fontfile='\${monoEsc}':textfile='\${fDesc}':fontsize=\${ry(20)}:fontcolor=white:x=\${rx(1045)}:y=\${destY+ry(38)}\`
           );
-          if(idx<funAwards.length-1)fp.push(\`drawbox=x=\${rx(1025)}:y=\${destY+ry(85)}:w=\${rx(735)}:h=1:color=0x374151@0.7:t=fill\`);
+          if(idx<awardsList.length-1)fp.push(\`drawbox=x=\${rx(1025)}:y=\${destY+ry(85)}:w=\${rx(735)}:h=1:color=0x374151@0.7:t=fill\`);
         }
       }else{
-        for(let idx=0;idx<Math.min(10,funAwards.length);idx++){
-          let item=funAwards[idx],col=Math.floor(idx/5),row=idx%5;
+        for(let idx=0;idx<Math.min(10,awardsList.length);idx++){
+          let item=awardsList[idx],col=Math.floor(idx/5),row=idx%5;
           let colX=col===0?rx(1015):rx(1410),rowY=ry(265)+row*ry(118);
-          let fBadge=wTxt(\`fa_b_\${idx}.txt\`,item.badge),fName=wTxt(\`fa_n_\${idx}.txt\`,item.playerName),fDesc=wTxt(\`fa_d_\${idx}.txt\`,item.desc);
+          let fBadge=wTxt(\`fa_b_\${idx}.txt\`,item.badge||item.trophy),fName=wTxt(\`fa_n_\${idx}.txt\`,item.playerName),fDesc=wTxt(\`fa_d_\${idx}.txt\`,item.desc);
           fp.push(
             \`drawtext=fontfile='\${emojiEsc}':textfile='\${fBadge}':fontsize=\${ry(21)}:fontcolor=0xfdba74:x=\${colX}:y=\${rowY}\`,
             \`drawtext=fontfile='\${boldEsc}':textfile='\${fName}':fontsize=\${ry(20)}:fontcolor=0xfef08a:x=\${colX}:y=\${rowY+ry(30)}\`,
             \`drawtext=fontfile='\${monoEsc}':textfile='\${fDesc}':fontsize=\${ry(16)}:fontcolor=white:x=\${colX}:y=\${rowY+ry(58)}\`
           );
-          if(row<4&&idx+1<funAwards.length)fp.push(\`drawbox=x=\${colX}:y=\${rowY+ry(98)}:w=\${rx(365)}:h=1:color=0x374151@0.5:t=fill\`);
+          if(row<4&&idx+1<awardsList.length)fp.push(\`drawbox=x=\${colX}:y=\${rowY+ry(98)}:w=\${rx(365)}:h=1:color=0x374151@0.5:t=fill\`);
         }
       }
     }else{
@@ -526,6 +583,7 @@ async function generateOutroVideoWithFFmpeg(cfg,signal){
     await pT.default.remove(tmpDir).catch(()=>{});
   }
 }
+
 async function hIe(t,e){
   logger.debug("Generating video with FFmpeg"),logger.debug(t);
   let{tgaFiles:r,wavFilePath:n,videoFilePath:o}=await hT(t);
@@ -830,7 +888,107 @@ function computeFunPlayerAwards(players,kills,clutches,mapName){
     }
   }
   return finalAwards;
-}`;
+}
+
+function computeLowlightsAwards(players, kills, clutches, shots, damages, mapName) {
+  let cleanMap = (mapName || "").toLowerCase();
+  let playerBagreStats = (players || []).map(p => {
+    let sid = String(p.steamId ?? p.steam_id ?? "");
+    let pKills = (kills || []).filter(k => String(k.killer_steam_id ?? k.killerSteamId ?? "") === sid);
+    let pDeaths = (kills || []).filter(k => String(k.victim_steam_id ?? k.victimSteamId ?? "") === sid);
+    let totalK = p.killCount ?? pKills.length, totalD = p.deathCount ?? pDeaths.length, ast = p.assistCount ?? 0;
+    let kd = (totalK / Math.max(1, totalD)).toFixed(2);
+
+    let knifeZeusVictim = pDeaths.filter(k => {
+      let w = String(k.weapon_name ?? k.weaponName ?? "").toLowerCase();
+      let wt = String(k.weapon_type ?? k.weaponType ?? "").toLowerCase();
+      return wt === "melee" || wt === "knife" || w.includes("knife") || w.includes("bayonet") || w.includes("taser") || w.includes("zeus");
+    }).length;
+
+    let suicides = pDeaths.filter(k => {
+      let kid = String(k.killer_steam_id ?? k.killerSteamId ?? "");
+      let w = String(k.weapon_name ?? k.weaponName ?? "").toLowerCase();
+      let wt = String(k.weapon_type ?? k.weaponType ?? "").toLowerCase();
+      return (kid === sid && kid !== "0") || wt === "world" || w.includes("world");
+    }).length;
+
+    let clutchesLost = (clutches || []).filter(c => !c.won && (c.opponent_count ?? c.opponentCount) === 1 && String(c.clutcher_steam_id ?? c.clutcherSteamId ?? "") === sid).length;
+    let blindDeaths = pDeaths.filter(k => Boolean(k.is_victim_blinded ?? k.isVictimBlinded)).length;
+    let inspectDeaths = pDeaths.filter(k => Boolean(k.is_victim_inspecting_weapon ?? k.isVictimInspectingWeapon)).length;
+
+    let whiffs = 0;
+    for (let k of pDeaths) {
+      let rNum = k.round_number ?? k.roundNumber;
+      let pShots = (shots || []).filter(s => (s.round_number ?? s.roundNumber) === rNum && String(s.player_steam_id ?? s.playerSteamId ?? "") === sid && s.tick >= k.tick - 192 && s.tick <= k.tick);
+      let gunShots = pShots.filter(s => !["knife", "bayonet", "taser", "flashbang", "smoke", "hegrenade", "molotov", "decoy"].some(x => String(s.weapon_name ?? s.weaponName ?? "").toLowerCase().includes(x)));
+      if (gunShots.length >= 7) {
+        let pDmg = (damages || []).filter(d => (d.round_number ?? d.roundNumber) === rNum && String(d.attacker_steam_id ?? d.attackerSteamId ?? "") === sid && d.tick >= k.tick - 192 && d.tick <= k.tick);
+        let totalDmg = pDmg.reduce((acc, d) => acc + (d.health_damage ?? d.healthDamage ?? 0), 0);
+        if (totalDmg <= 20) whiffs++;
+      }
+    }
+
+    let failCount = knifeZeusVictim * 3 + suicides * 3 + clutchesLost * 2 + whiffs * 2 + blindDeaths + inspectDeaths;
+    let bagreScore = totalD * 3 - totalK * 2 + failCount * 4;
+
+    return {
+      player: p,
+      sid,
+      name: p.name || "Jogador",
+      teamName: p.teamName || p.team_name || "Equipe",
+      killCount: totalK,
+      deathCount: totalD,
+      assistCount: ast,
+      kd,
+      knifeZeusVictim,
+      suicides,
+      clutchesLost,
+      blindDeaths,
+      inspectDeaths,
+      whiffs,
+      failCount,
+      bagreScore
+    };
+  });
+
+  playerBagreStats.sort((a, b) => b.bagreScore - a.bagreScore);
+  let topBagre = playerBagreStats[0] || { name: "Jogador", teamName: "Equipe", killCount: 0, deathCount: 0, assistCount: 0, kd: "1.00", failCount: 0, bagreScore: 0 };
+
+  let pool = [];
+  for (let s of playerBagreStats) {
+    let cands = [];
+    if (s.knifeZeusVictim >= 1) cands.push({ id: "vitima_faca", badge: "Ima de Faca 🔪", title: "Trofeu Ima de Faca 🔪", desc: "Vitima preferida: tomou " + s.knifeZeusVictim + " facada(s)/choque(s)", score: 120 + s.knifeZeusVictim * 15 });
+    if (s.suicides >= 1) cands.push({ id: "churrasqueiro", badge: "Auto-Combustao 🔥", title: "Trofeu Auto-Combustao 🔥", desc: "Suicidio gourmet: " + s.suicides + " morte(s) pra molotov/queda", score: 115 + s.suicides * 20 });
+    if (s.clutchesLost >= 1) cands.push({ id: "pipoca", badge: "Pipoca de Ouro 🍿", title: "Trofeu Pipoca de Ouro 🍿", desc: "Tremeu na base: perdeu " + s.clutchesLost + " clutch(es) no 1v1", score: 100 + s.clutchesLost * 15 });
+    if (s.whiffs >= 1) cands.push({ id: "ventilador", badge: "Ventilador Humano 💨", title: "Trofeu Ventilador Humano 💨", desc: "Spray no vento: " + s.whiffs + " vez(es) sem acertar 1 tiro", score: 95 + s.whiffs * 12 });
+    if (s.blindDeaths >= 1) cands.push({ id: "mister_magoo", badge: "Mister Magoo 🕶️", title: "Trofeu Mister Magoo 🕶️", desc: "Passeando no escuro: morreu 100% cego " + s.blindDeaths + "x", score: 85 + s.blindDeaths * 10 });
+    if (s.inspectDeaths >= 1) cands.push({ id: "avaliador_skin", badge: "Avaliador de Skins 🔎", title: "Trofeu Avaliador de Skins 🔎", desc: "Morreu admirando a skin em vez de dar tiro", score: 90 });
+    if (s.deathCount >= 10) cands.push({ id: "saco_pancadas", badge: "Saco de Pancadas 🥊", title: "Trofeu Saco de Pancadas 🥊", desc: "Fregues do jogo: acumulou " + s.deathCount + " mortes na partida", score: 70 + s.deathCount });
+    if (parseFloat(s.kd) < 1.0) cands.push({ id: "inimigo_vitoria", badge: "Inimigo da Vitoria 🤡", title: "Trofeu Inimigo da Vitoria 🤡", desc: "K/D negativo de " + s.kd + " (" + s.killCount + "K / " + s.deathCount + "D)", score: 80 });
+    cands.push({ id: "resenha", badge: "Amigo da Resenha 🥬", title: "Trofeu Amigo da Resenha 🥬", desc: "Nao jogou nada, mas garantiu a resenha no Discord", score: 10 });
+
+    for (let c of cands) pool.push({ sid: s.sid, name: s.name, award: c, score: c.score });
+  }
+
+  pool.sort((a, b) => b.score - a.score);
+  let assignedP = new Set(), assignedT = new Set(), finalAwards = [];
+  for (let c of pool) {
+    if (!assignedP.has(c.sid) && !assignedT.has(c.award.id)) {
+      assignedP.add(c.sid);
+      assignedT.add(c.award.id);
+      finalAwards.push({ steamId: c.sid, playerName: c.name, trophy: c.award.title, badge: c.award.badge, desc: c.award.desc });
+    }
+  }
+  for (let s of playerBagreStats) {
+    if (!assignedP.has(s.sid)) {
+      finalAwards.push({ steamId: s.sid, playerName: s.name, trophy: "Trofeu Amigo da Resenha 🥬", badge: "Amigo da Resenha 🥬", desc: "Nao jogou nada, mas garantiu a resenha no Discord" });
+      assignedP.add(s.sid);
+    }
+  }
+
+  return { topBagre, awards: finalAwards, bagreStats: playerBagreStats };
+}
+`;
 
 serverJs = replaceExact(serverJs, oldHieFull, newHieAndIntroFull, 'generateVideoWithFFmpeg + generateIntroVideoWithFFmpeg + generateOutroVideoWithFFmpeg (hIe)');
 
@@ -876,10 +1034,10 @@ async function fetchMatchIntroHudCtx(checksum){
       I.selectFrom("teams").select(["name","score","letter"]).where("match_checksum","=",checksum).orderBy("letter","asc").execute(),
       I.selectFrom("players").select(["steam_id","name","team_name","kill_count","death_count","assist_count"]).where("match_checksum","=",checksum).execute(),
       I.selectFrom("rounds").select(["number","start_tick","end_tick"]).where("match_checksum","=",checksum).orderBy("number","asc").execute(),
-      I.selectFrom("kills").select(["id","tick","round_number","killer_steam_id","killer_name","killer_team_name","victim_steam_id","victim_name","victim_team_name","assister_steam_id","assister_team_name","weapon_name","weapon_type","is_headshot","is_no_scope","is_through_smoke","penetrated_objects","is_killer_controlling_bot","is_killer_airborne","is_killer_blinded","is_victim_blinded","is_trade_kill"]).where("match_checksum","=",checksum).orderBy("tick","asc").execute(),
+      I.selectFrom("kills").select(["id","tick","round_number","killer_steam_id","killer_name","killer_team_name","victim_steam_id","victim_name","victim_team_name","assister_steam_id","assister_team_name","weapon_name","weapon_type","is_headshot","is_no_scope","is_through_smoke","penetrated_objects","is_killer_controlling_bot","is_killer_airborne","is_killer_blinded","is_victim_blinded","is_victim_inspecting_weapon","is_trade_kill"]).where("match_checksum","=",checksum).orderBy("tick","asc").execute(),
       I.selectFrom("clutches").select(["round_number","tick","clutcher_steam_id","clutcher_name","opponent_count","won"]).where("match_checksum","=",checksum).execute().catch(()=>[]),
       I.selectFrom("shots").select(["round_number","tick","player_steam_id","weapon_name"]).where("match_checksum","=",checksum).orderBy("tick","asc").execute().catch(()=>[]),
-      I.selectFrom("damages").select(["round_number","attacker_steam_id","victim_steam_id"]).where("match_checksum","=",checksum).execute().catch(()=>[])
+      I.selectFrom("damages").select(["round_number","tick","health_damage","attacker_steam_id","victim_steam_id"]).where("match_checksum","=",checksum).execute().catch(()=>[])
     ]);
     let precStreaks=detectPrecisionKillStreaks(killRows,shotRows);
     let kMap=new Map(),dMap=new Map(),aMap=new Map(),humKMap=new Map(),botKMap=new Map(),hsMap=new Map(),ssgCollatMap=new Map();
@@ -932,7 +1090,8 @@ async function fetchMatchIntroHudCtx(checksum){
       clutches:(clutchRows||[]).map(c=>({roundNumber:Number(c.round_number),tick:Number(c.tick??0),clutcherSteamId:c.clutcher_steam_id??void 0,clutcherName:c.clutcher_name??void 0,opponentCount:Number(c.opponent_count??1),won:Boolean(c.won)})),
       mvp:topMvp,
       highlights:outroHighlights,
-      funAwards:computeFunPlayerAwards(humanPlayersWithStats,killRows,clutchRows,demoRow?.map_name)
+      funAwards:computeFunPlayerAwards(humanPlayersWithStats,killRows,clutchRows,demoRow?.map_name),
+      lowlightsCtx:computeLowlightsAwards(humanPlayersWithStats,killRows,clutchRows,shotRows,damageRows,demoRow?.map_name)
     };
   }catch(err){
     logger.error("Failed to fetch match context for intro/HUD/outro",err);
@@ -977,17 +1136,18 @@ async function Ayt({signal:t,...e}){
     }
   }
   if(completedSeqs.length===0&&lastErr)throw lastErr;
+  let isLowlightVideo=Boolean(e.isLowlight)||s.some(seq=>seq.isLowlight);
   let introVideoPath,outroVideoPath;
   if(showIntro&&o===Bs.FFmpeg&&completedSeqs.length>0&&matchCtx){
     try{
-      introVideoPath=await generateIntroVideoWithFFmpeg({ffmpegExecutablePath:ffBin,game:A,mapName:matchCtx.mapName||e.mapName,matchDate:matchCtx.matchDate,teamAName:matchCtx.teamAName,teamAScore:matchCtx.teamAScore,teamBName:matchCtx.teamBName,teamBScore:matchCtx.teamBScore,players:matchCtx.players,width:e.width,height:e.height,framerate:targetFps,outputFolderPath:a,videoContainer:u.videoContainer,videoCodec:u.videoCodec,audioCodec:u.audioCodec,constantRateFactor:u.constantRateFactor,audioBitrate:u.audioBitrate,outputParameters:u.outputParameters},t);
+      introVideoPath=await generateIntroVideoWithFFmpeg({ffmpegExecutablePath:ffBin,game:A,mapName:matchCtx.mapName||e.mapName,matchDate:matchCtx.matchDate,teamAName:matchCtx.teamAName,teamAScore:matchCtx.teamAScore,teamBName:matchCtx.teamBName,teamBScore:matchCtx.teamBScore,players:matchCtx.players,width:e.width,height:e.height,framerate:targetFps,outputFolderPath:a,videoContainer:u.videoContainer,videoCodec:u.videoCodec,audioCodec:u.audioCodec,constantRateFactor:u.constantRateFactor,audioBitrate:u.audioBitrate,outputParameters:u.outputParameters,isLowlight:isLowlightVideo},t);
     }catch(err){
       logger.error("Failed to generate 8s intro video, continuing with sequences",err);
     }
   }
   if(showOutro&&o===Bs.FFmpeg&&completedSeqs.length>0&&matchCtx){
     try{
-      outroVideoPath=await generateOutroVideoWithFFmpeg({ffmpegExecutablePath:ffBin,game:A,mapName:matchCtx.mapName||e.mapName,teamAName:matchCtx.teamAName,teamAScore:matchCtx.teamAScore,teamBName:matchCtx.teamBName,teamBScore:matchCtx.teamBScore,mvp:matchCtx.mvp,highlights:matchCtx.highlights,showFunAwards:showFun,funAwards:matchCtx.funAwards,width:e.width,height:e.height,framerate:targetFps,outputFolderPath:a,videoContainer:u.videoContainer,videoCodec:u.videoCodec,audioCodec:u.audioCodec,constantRateFactor:u.constantRateFactor,audioBitrate:u.audioBitrate,outputParameters:u.outputParameters},t);
+      outroVideoPath=await generateOutroVideoWithFFmpeg({ffmpegExecutablePath:ffBin,game:A,mapName:matchCtx.mapName||e.mapName,teamAName:matchCtx.teamAName,teamAScore:matchCtx.teamAScore,teamBName:matchCtx.teamBName,teamBScore:matchCtx.teamBScore,mvp:matchCtx.mvp,highlights:matchCtx.highlights,showFunAwards:showFun,funAwards:matchCtx.funAwards,width:e.width,height:e.height,framerate:targetFps,outputFolderPath:a,videoContainer:u.videoContainer,videoCodec:u.videoCodec,audioCodec:u.audioCodec,constantRateFactor:u.constantRateFactor,audioBitrate:u.audioBitrate,outputParameters:u.outputParameters,isLowlight:isLowlightVideo,lowlightsCtx:matchCtx.lowlightsCtx},t);
     }catch(err){
       logger.error("Failed to generate outro video, continuing with sequences",err);
     }

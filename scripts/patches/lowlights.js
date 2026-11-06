@@ -316,7 +316,7 @@ function buildLowlightsCandidates({match,steamIds,filters={}}){
 function buildLowlightsSequences({match,steamIds,filters={},maxDurationSeconds=120,includeIntro=true,includeOutro=true,settings={},firstSequenceNumber=1}){
   let tr=match.tickrate>0?match.tickrate:64;
   let candidates=buildLowlightsCandidates({match,steamIds,filters});
-  let introExtra=includeIntro?8:0,outroExtra=includeOutro?5:0;
+  let introExtra=includeIntro?8:0,outroExtra=includeOutro?8:0;
   let budget=Math.max(10,maxDurationSeconds-introExtra-outroExtra),used=0,chosen=[],perPlayer=new Map(),remaining=[...candidates];
   let minGapTicks=Math.round(tr*4);
 
@@ -480,7 +480,8 @@ function GenerateLowlightsDialog(){
         tickrate:match.tickrate,
         demoPath:match.demoFilePath,
         mapName:match.mapName,
-        sequences:result.sequences
+        sequences:result.sequences,
+        isLowlight:!0
       };
       await client.send({name:Lg.AddVideoToQueue,payload});
       await client.send({name:Lg.ResumeVideoQueue});
@@ -525,8 +526,8 @@ function GenerateLowlightsDialog(){
         (0,Q.jsx)("span",{className:"text-body-strong",children:"Efeitos e Gravação:"}),
         (0,Q.jsx)(Checkbox,{label:"Badges cômicos de bagre no HUD (ex: HUMILHADO NA FACA, CHURRASCO PRÓPRIO, WHIFF)",isChecked:enableKillCounter,onChange:e=>setEnableKillCounter(e.target.checked)}),
         (0,Q.jsx)(Checkbox,{label:"Câmera lenta (Slow Motion 0.5x) no exato instante do fail",isChecked:enableSlowMotion,onChange:e=>setEnableSlowMotion(e.target.checked)}),
-        (0,Q.jsx)(Checkbox,{label:"Tela de introdução de 8s (Mapa, Placar Final e KDA)",isChecked:showIntroScreen,onChange:e=>setShowIntroScreen(e.target.checked)}),
-        (0,Q.jsx)(Checkbox,{label:"Troféus Engraçados no encerramento (Porta da Esperança, Cearense Lover, Bob Marley, Pikachu, etc.)",isChecked:showFunAwards&&showOutroScreen,onChange:e=>{setShowFunAwards(e.target.checked);setShowOutroScreen(e.target.checked);}}),
+        (0,Q.jsx)(Checkbox,{label:"Tela de introdução cômica de 8s (Ranking de Bagres, Mortes e K/D)",isChecked:showIntroScreen,onChange:e=>setShowIntroScreen(e.target.checked)}),
+        (0,Q.jsx)(Checkbox,{label:"Tela de encerramento no final (Troféu Bagre de Ouro e Hall da Vergonha)",isChecked:showFunAwards&&showOutroScreen,onChange:e=>{setShowFunAwards(e.target.checked);setShowOutroScreen(e.target.checked);}}),
         (0,Q.jsx)(Checkbox,{label:"Transição suave (Fade) entre as trapalhadas",isChecked:enableSequenceTransitions,onChange:e=>setEnableSequenceTransitions(e.target.checked)}),
         (0,Q.jsx)(Checkbox,{label:"Gravar com o CS oculto em 2º plano",isChecked:hideGameWindow,onChange:e=>setHideGameWindow(e.target.checked)})
       ]}),
