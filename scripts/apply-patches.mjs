@@ -460,6 +460,26 @@ async function generateIntroVideoWithFFmpeg(cfg,signal){
 }
 
 function getFunnyBagreExcuse(topBagre){
+  let name=String(topBagre?.name||"").toLowerCase();
+  let seed=(topBagre?.killCount||0)*17+(topBagre?.deathCount||0)*31+(topBagre?.failCount||0)*13;
+
+  if(name.includes("depadua")){
+    let cigExcuses=[
+      '"Fui bater a cinza do cigarro e queimei a tecla do strafe"',
+      '"Caiu brasa do cigarro no mousepad bem na hora da trocacao"',
+      '"A fumaca do cigarro entrou no olho bem quando abri o pixel"',
+      '"Tava acendendo o cigarro com uma mao e atirando com a outra"',
+      '"Fui puxar o cinzeiro na mesa e tomei HS na boca"',
+      '"A cinza do cigarro caiu no espaco e meu boneco pulou sozinho"',
+      '"Fui dar um trago no meio do bomb e perdi o controle do spray"',
+      '"A brasa do cigarro queimou meu dedo bem no recoil"',
+      '"Fui acender o cigarro e nao deu tempo de puxar a mira"',
+      '"A fumaca do Derby cobriu meu monitor inteiro, parecia smoke"'
+    ];
+    let idx=Math.abs(seed)%cigExcuses.length;
+    return cigExcuses[idx];
+  }
+
   let list=[];
   if(topBagre.whiffs>=1){
     list.push(
@@ -514,7 +534,6 @@ function getFunnyBagreExcuse(topBagre){
     '"Tava com 150 de ping na mente e 20 na tela"'
   );
 
-  let seed=(topBagre.killCount||0)*17+(topBagre.deathCount||0)*31+(topBagre.failCount||0)*13;
   let idx=Math.abs(seed)%list.length;
   return list[idx];
 }
@@ -991,6 +1010,11 @@ function computeFunPlayerAwards(players,kills,clutches,mapName){
   return finalAwards;
 }
 
+function isLowlightPistol(weaponName){
+  let w=String(weaponName||"").toLowerCase().replace(/[-_ ]/g,"");
+  return ["glock","deagle","deserteagle","beretta","dual","elite","fiveseven","p2000","hkp2000","p250","tec9","usp","cz75","revolver"].some(p=>w.includes(p));
+}
+
 function computeLowlightsAwards(players, kills, clutches, shots, damages, mapName) {
   let cleanMap = (mapName || "").toLowerCase();
   let playerBagreStats = (players || []).map(p => {
@@ -1022,10 +1046,14 @@ function computeLowlightsAwards(players, kills, clutches, shots, damages, mapNam
       let rNum = k.round_number ?? k.roundNumber;
       let pShots = (shots || []).filter(s => (s.round_number ?? s.roundNumber) === rNum && String(s.player_steam_id ?? s.playerSteamId ?? "") === sid && s.tick >= k.tick - 192 && s.tick <= k.tick);
       let gunShots = pShots.filter(s => !["knife", "bayonet", "taser", "flashbang", "smoke", "hegrenade", "molotov", "decoy"].some(x => String(s.weapon_name ?? s.weaponName ?? "").toLowerCase().includes(x)));
-      if (gunShots.length >= 7) {
-        let pDmg = (damages || []).filter(d => (d.round_number ?? d.roundNumber) === rNum && String(d.attacker_steam_id ?? d.attackerSteamId ?? "") === sid && d.tick >= k.tick - 192 && d.tick <= k.tick);
-        let totalDmg = pDmg.reduce((acc, d) => acc + (d.health_damage ?? d.healthDamage ?? 0), 0);
-        if (totalDmg <= 20) whiffs++;
+      if (gunShots.length > 0) {
+        let mainWp = gunShots[0].weapon_name ?? gunShots[0].weaponName ?? "";
+        let minShots = isLowlightPistol(mainWp) ? 8 : 16;
+        if (gunShots.length >= minShots) {
+          let pDmg = (damages || []).filter(d => (d.round_number ?? d.roundNumber) === rNum && String(d.attacker_steam_id ?? d.attackerSteamId ?? "") === sid && d.tick >= k.tick - 192 && d.tick <= k.tick);
+          let totalDmg = pDmg.reduce((acc, d) => acc + (d.health_damage ?? d.healthDamage ?? 0), 0);
+          if (totalDmg <= 20) whiffs++;
+        }
       }
     }
 
@@ -1061,7 +1089,7 @@ function computeLowlightsAwards(players, kills, clutches, shots, damages, mapNam
     if (s.knifeZeusVictim >= 1) cands.push({ id: "vitima_faca", badge: "Ima de Faca 🔪", title: "Trofeu Ima de Faca 🔪", desc: "Vitima preferida: tomou " + s.knifeZeusVictim + " facada(s)/choque(s)", score: 120 + s.knifeZeusVictim * 15 });
     if (s.suicides >= 1) cands.push({ id: "churrasqueiro", badge: "Auto-Combustao 🔥", title: "Trofeu Auto-Combustao 🔥", desc: "Suicidio gourmet: " + s.suicides + " morte(s) pra molotov/queda", score: 115 + s.suicides * 20 });
     if (s.clutchesLost >= 1) cands.push({ id: "pipoca", badge: "Pipoca de Ouro 🍿", title: "Trofeu Pipoca de Ouro 🍿", desc: "Tremeu na base: perdeu " + s.clutchesLost + " clutch(es) no 1v1", score: 100 + s.clutchesLost * 15 });
-    if (s.whiffs >= 1) cands.push({ id: "ventilador", badge: "Ventilador Humano 💨", title: "Trofeu Ventilador Humano 💨", desc: "Spray no vento: " + s.whiffs + " vez(es) sem acertar 1 tiro", score: 95 + s.whiffs * 12 });
+    if (s.whiffs >= 1) cands.push({ id: "ventilador", badge: "Ventilador Humano 💨", title: "Trofeu Ventilador Humano 💨", desc: "Spray no vento: " + s.whiffs + " vez(es) sem acertar 1 tiro (>15 rifle / >7 pistola)", score: 95 + s.whiffs * 12 });
     if (s.blindDeaths >= 1) cands.push({ id: "mister_magoo", badge: "Mister Magoo 🕶️", title: "Trofeu Mister Magoo 🕶️", desc: "Passeando no escuro: morreu 100% cego " + s.blindDeaths + "x", score: 85 + s.blindDeaths * 10 });
     if (s.inspectDeaths >= 1) cands.push({ id: "avaliador_skin", badge: "Avaliador de Skins 🔎", title: "Trofeu Avaliador de Skins 🔎", desc: "Morreu admirando a skin em vez de dar tiro", score: 90 });
     if (s.deathCount >= 10) cands.push({ id: "saco_pancadas", badge: "Saco de Pancadas 🥊", title: "Trofeu Saco de Pancadas 🥊", desc: "Fregues do jogo: acumulou " + s.deathCount + " mortes na partida", score: 70 + s.deathCount });

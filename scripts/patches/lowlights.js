@@ -3,6 +3,11 @@ function isHumanSteamIdForLowlights(id){
   return s!==""&&s!=="0"&&s.length>5;
 }
 
+function isLowlightPistol(weaponName){
+  let w=String(weaponName||"").toLowerCase().replace(/[-_ ]/g,"");
+  return ["glock","deagle","deserteagle","beretta","dual","elite","fiveseven","p2000","hkp2000","p250","tec9","usp","cz75","revolver"].some(p=>w.includes(p));
+}
+
 function buildLowlightsCandidates({match,steamIds,filters={}}){
   let {
     includeHumiliations=true,
@@ -172,8 +177,11 @@ function buildLowlightsCandidates({match,steamIds,filters={}}){
         return !["knife","bayonet","karambit","dagger","flashbang","smoke","hegrenade","molotov","incendiary","decoy"].some(x=>sw.includes(x));
       });
 
-      if(gunShots.length>=7){
-        let pDmg=damages.filter(d=>(d.roundNumber??d.round_number)===rNum&&(d.attackerSteamId??d.attacker_steam_id)===vid&&d.tick>=k.tick-192&&d.tick<=k.tick);
+      if(gunShots.length>0){
+        let mainWp=gunShots[0].weaponName??gunShots[0].weapon_name??"";
+        let minShots=isLowlightPistol(mainWp)?8:16;
+        if(gunShots.length>=minShots){
+          let pDmg=damages.filter(d=>(d.roundNumber??d.round_number)===rNum&&(d.attackerSteamId??d.attacker_steam_id)===vid&&d.tick>=k.tick-192&&d.tick<=k.tick);
         let totalDmg=pDmg.reduce((acc,d)=>acc+(d.healthDamage??d.health_damage??0),0);
         if(totalDmg<=20){
           let rnd=roundsMap.get(rNum);
@@ -201,6 +209,7 @@ function buildLowlightsCandidates({match,steamIds,filters={}}){
       }
     }
   }
+}
 
   // 5. Mortes Distraídas (Cego ou Inspecionando Arma)
   if(includeDistracted){
