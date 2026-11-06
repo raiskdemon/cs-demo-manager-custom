@@ -50,7 +50,7 @@ function buildLowlightsCandidates({match,steamIds,filters={}}){
       let rEnd=rnd?rnd.endTick:maxTick;
 
       let startTick=Math.max(rStart,k.tick-Math.round(tr*4.0));
-      let endTick=Math.min(rEnd,k.tick+Math.round(tr*2.0));
+      let endTick=Math.min(rEnd,k.tick+Math.round(tr*3.0));
       let badge=isKnife?`🔪 HUMILHADO NA FACA (POR ${kName})`:`⚡ TOMOU ZEUS (CHOQUE DO ANO)`;
       let desc=isKnife?`Humilhado na Faca por ${kName}`:`Levou choque de Zeus de ${kName}`;
       let score=isKnife?100:95;
@@ -106,7 +106,7 @@ function buildLowlightsCandidates({match,steamIds,filters={}}){
       }
 
       let startTick=Math.max(rStart,k.tick-Math.round(tr*4.5));
-      let endTick=Math.min(rEnd,k.tick+Math.round(tr*2.0));
+      let endTick=Math.min(rEnd,k.tick+Math.round(tr*3.0));
 
       rawCandidates.push({
         steamId:vid,
@@ -142,7 +142,7 @@ function buildLowlightsCandidates({match,steamIds,filters={}}){
       let evTick=death?death.tick:c.tick;
 
       let startTick=Math.max(rStart,evTick-Math.round(tr*5.5));
-      let endTick=Math.min(rEnd,evTick+Math.round(tr*2.0));
+      let endTick=Math.min(rEnd,evTick+Math.round(tr*3.0));
 
       rawCandidates.push({
         steamId:cid,
@@ -190,7 +190,7 @@ function buildLowlightsCandidates({match,steamIds,filters={}}){
           let wpName=gunShots[0].weaponName??gunShots[0].weapon_name??"Arma";
           let firstShotTick=gunShots[0].tick;
           let startTick=Math.max(rStart,firstShotTick-Math.round(tr*1.2));
-          let endTick=Math.min(rEnd,k.tick+Math.round(tr*2.0));
+          let endTick=Math.min(rEnd,k.tick+Math.round(tr*3.0));
 
           rawCandidates.push({
             steamId:vid,
@@ -228,7 +228,7 @@ function buildLowlightsCandidates({match,steamIds,filters={}}){
       let rStart=rnd?rnd.startTick:1;
       let rEnd=rnd?rnd.endTick:maxTick;
       let startTick=Math.max(rStart,k.tick-Math.round(tr*3.5));
-      let endTick=Math.min(rEnd,k.tick+Math.round(tr*2.0));
+      let endTick=Math.min(rEnd,k.tick+Math.round(tr*3.0));
 
       if(isInspect){
         rawCandidates.push({
@@ -282,7 +282,7 @@ function buildLowlightsCandidates({match,steamIds,filters={}}){
       let rStart=rnd?rnd.startTick:1;
       let rEnd=rnd?rnd.endTick:maxTick;
       let startTick=Math.max(rStart,k.tick-Math.round(tr*3.5));
-      let endTick=Math.min(rEnd,k.tick+Math.round(tr*2.0));
+      let endTick=Math.min(rEnd,k.tick+Math.round(tr*3.0));
 
       rawCandidates.push({
         steamId:kid,

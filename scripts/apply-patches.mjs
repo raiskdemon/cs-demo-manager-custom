@@ -538,6 +538,24 @@ function getFunnyBagreExcuse(topBagre){
   return list[idx];
 }
 
+function wrapTextLines(text, maxLen = 42) {
+  let clean = String(text || "").replace(/^"|"\$/g, "").trim();
+  let words = clean.split(/\\s+/);
+  let lines = [], cur = "";
+  for (let w of words) {
+    if (!cur) {
+      cur = w;
+    } else if ((cur + " " + w).length <= maxLen) {
+      cur += " " + w;
+    } else {
+      lines.push(cur);
+      cur = w;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
 async function generateOutroVideoWithFFmpeg(cfg,signal){
   let{ffmpegExecutablePath:i,game:h,mapName,teamAName,teamAScore,teamBName,teamBScore,mvp,highlights,showFunAwards=!0,funAwards=[],width,height,framerate:s,outputFolderPath:m,videoContainer:g,videoCodec:c,constantRateFactor:A,audioBitrate:u,outputParameters:d,isLowlight=!1,lowlightsCtx=null}=cfg;
   let effectiveAwards=isLowlight?(lowlightsCtx?.awards&&lowlightsCtx.awards.length>0?lowlightsCtx.awards:funAwards):funAwards;
@@ -584,9 +602,7 @@ async function generateOutroVideoWithFFmpeg(cfg,signal){
       ?\`• Trapalhadas na Partida: \${topBagre?.failCount??0} lances epicos\`
       :\`• Kills em Bots Assumidos: \${mvp?.botKills??0}\`);
     let officialExcuse=isLowlight?getFunnyBagreExcuse(topBagre):"";
-    let fMvpHs=wTxt("mvp_hs.txt",isLowlight
-      ?\`• Desculpa Oficial: \${officialExcuse}\`
-      :\`• Taxa de Headshot: \${mvp?.hsRate??0}%\`);
+    let fMvpHs=isLowlight?"":wTxt("mvp_hs.txt",\`• Taxa de Headshot: \${mvp?.hsRate??0}%\`);
     let destTitle=isLowlight?"HALL DA VERGONHA & PREMIACOES 🤡":(hasFun?"TROFEUS DA PARTIDA":"DESTAQUES DA PARTIDA");
     let fDestT=wTxt("dest_t.txt",destTitle);
     let fFtr=wTxt("ftr.txt",isLowlight
@@ -618,13 +634,30 @@ async function generateOutroVideoWithFFmpeg(cfg,signal){
       \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpKda}':fontsize=\${ry(28)}:fontcolor=white:x=\${rx(160)}:y=\${ry(400)}\`,
       \`drawbox=x=\${rx(160)}:y=\${ry(455)}:w=\${rx(735)}:h=1:color=0x374151@0.9:t=fill\`,
       \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpHum}':fontsize=\${ry(25)}:fontcolor=0xe2e8f0:x=\${rx(160)}:y=\${ry(490)}\`,
-      \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpBot}':fontsize=\${ry(25)}:fontcolor=0x94a3b8:x=\${rx(160)}:y=\${ry(550)}\`,
-      \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpHs}':fontsize=\${ry(23)}:fontcolor=0xfbbf24:x=\${rx(160)}:y=\${ry(610)}\`,
+      \`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpBot}':fontsize=\${ry(25)}:fontcolor=0x94a3b8:x=\${rx(160)}:y=\${ry(550)}\`
+    ];
+    if(isLowlight){
+      let fExcuseT=wTxt("mvp_exc_t.txt","• Desculpa Oficial:");
+      fp.push(\`drawtext=fontfile='\${boldEsc}':textfile='\${fExcuseT}':fontsize=\${ry(24)}:fontcolor=0xfbbf24:x=\${rx(160)}:y=\${ry(610)}\`);
+      let excLines=wrapTextLines(officialExcuse,42);
+      let excY=ry(655);
+      for(let li=0;li<excLines.length;li++){
+        let pfx=li===0?'"':' ';
+        let sfx=li===excLines.length-1?'"':'';
+        let lineTxt=\`\${pfx}\${excLines[li]}\${sfx}\`;
+        let fLine=wTxt(\`mvp_exc_\${li}.txt\`,lineTxt);
+        fp.push(\`drawtext=fontfile='\${monoEsc}':textfile='\${fLine}':fontsize=\${ry(21)}:fontcolor=0xfef08a:x=\${rx(190)}:y=\${excY}\`);
+        excY+=ry(36);
+      }
+    }else{
+      fp.push(\`drawtext=fontfile='\${boldEsc}':textfile='\${fMvpHs}':fontsize=\${ry(23)}:fontcolor=0xfbbf24:x=\${rx(160)}:y=\${ry(610)}\`);
+    }
+    fp.push(
       \`drawbox=x=\${rx(985)}:y=\${ry(180)}:w=\${rx(815)}:h=\${ry(735)}:color=0x0f172ae8:t=fill\`,
       \`drawbox=x=\${rx(985)}:y=\${ry(180)}:w=\${rx(815)}:h=\${ry(58)}:color=\${rightBoxHdrColor}:t=fill\`,
       \`drawbox=x=\${rx(985)}:y=\${ry(180)}:w=\${rx(815)}:h=\${ry(735)}:color=\${rightBoxBorderColor}:t=2\`,
       \`drawtext=fontfile='\${boldEsc}':textfile='\${fDestT}':fontsize=\${ry(28)}:fontcolor=0xfbbf24:x=\${rx(1025)}:y=\${ry(195)}\`
-    ];
+    );
     if(hasFun){
       let awardsList=effectiveAwards;
       if(awardsList.length<=5){

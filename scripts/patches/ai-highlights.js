@@ -117,7 +117,7 @@ function isWildcardKillForAi(k){
   let isPrecision=Boolean(k.isPrecisionStreak);
   return isNs||isKnife||isZeus||isSsgCollat||isPrecision;
 }
-function buildAiHighlightsCandidates({match,steamIds,startSecondsBeforeEvent=3,endSecondsAfterEvent=2}){
+function buildAiHighlightsCandidates({match,steamIds,startSecondsBeforeEvent=3,endSecondsAfterEvent=3}){
   let tr=match.tickrate>0?match.tickrate:64,before=Math.round(tr*startSecondsBeforeEvent),after=Math.round(tr*endSecondsAfterEvent),maxTick=match.tickCount>0?match.tickCount:Number.MAX_SAFE_INTEGER;
   let ssgCollatTickMap=new Map();
   for(let k of match.kills||[]){
@@ -252,7 +252,7 @@ function buildAiHighlightsCandidates({match,steamIds,startSecondsBeforeEvent=3,e
   }
   return candidates;
 }
-function buildAiHighlightsSequences({match,steamIds,maxDurationSeconds=180,includeIntro=!0,includeOutro=!0,alwaysIncludeWildcardKills=!0,settings,firstSequenceNumber=1,startSecondsBeforeEvent=3,endSecondsAfterEvent=2}){
+function buildAiHighlightsSequences({match,steamIds,maxDurationSeconds=180,includeIntro=!0,includeOutro=!0,alwaysIncludeWildcardKills=!0,settings,firstSequenceNumber=1,startSecondsBeforeEvent=3,endSecondsAfterEvent=3}){
   let tr=match.tickrate>0?match.tickrate:64;
   let candidates=buildAiHighlightsCandidates({match,steamIds,startSecondsBeforeEvent,endSecondsAfterEvent});
   let introExtra=includeIntro?8:0,outroExtra=includeOutro?5:0;
