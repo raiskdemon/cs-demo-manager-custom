@@ -537,7 +537,13 @@ async function hIe(t,e){
   let sortedCams=Array.isArray(H.playerCameras)?[...H.playerCameras].sort((x,y)=>x.tick-y.tick):[];
   let kills=Array.isArray(seqKills)?[...seqKills].sort((x,y)=>x.tick-y.tick):[];
   let slowMo=null;
-  if(enSlow&&kills.length>0){
+  if(H.isLowlight&&enSlow){
+    let fTick=H.lowlightTick||(kills.length>0?kills[0].tick:null);
+    if(fTick){
+      let kSec=(fTick-H.startTick)/Math.max(1,tk),sSt=Math.max(0.2,kSec-0.5),sEn=Math.min(rawSeqDur-0.2,kSec+1.0);
+      if(sEn-sSt>=0.8)slowMo={startSec:sSt,endSec:sEn,speed:0.5,extraSec:sEn-sSt,tick:fTick};
+    }
+  }else if(enSlow&&kills.length>0){
     let best=null,bSc=-1;
     for(let k of kills){
       let isClutch=seqClutches.some(cl=>cl.won&&cl.roundNumber===k.roundNumber&&cl.clutcherSteamId===k.killerSteamId);
@@ -605,7 +611,11 @@ async function hIe(t,e){
         let cEnRaw=idx<sortedCams.length-1?Math.max(cStRaw+0.1,(camEndTick-H.startTick)/Math.max(1,tk)):rawSeqDur+30;
         let cKills=kills.filter(k=>k.killerSteamId===cam.playerSteamId&&k.tick>=camStartTick&&k.tick<camEndTick+64);
         let intervals=[];
-        if(!enKills||cKills.length===0){
+        if(H.isLowlight||cam.isLowlight||H.lowlightBadge){
+          let badge=H.lowlightBadge||cam.lowlightBadge||"🤡 TRAPALHADA DA PARTIDA";
+          let bColor="0xef4444cc",bWidth=3;
+          intervals.push({rawStart:cStRaw,rawEnd:cEnRaw,text:\`\${basePov}  |  \${badge}\`,borderColor:bColor,borderWidth:bWidth,isLowlight:true});
+        }else if(!enKills||cKills.length===0){
           intervals.push({rawStart:cStRaw,rawEnd:cEnRaw,text:basePov,borderColor:"0x3b82f688",borderWidth:2});
         }else{
           let firstSec=(cKills[0].tick-H.startTick)/Math.max(1,tk);
@@ -633,7 +643,7 @@ async function hIe(t,e){
           writeCleanTxtSync(lblFile,it.text);
           let escLbl=escFfPath(lblFile);
           let enExpr=\`:enable='between(t,\${adjSt.toFixed(2)},\${adjEn.toFixed(2)})'\`;
-          let boxW=Math.max(360,Math.min(1080,Math.round(it.text.length*13.5+56))),boxH=54,boxX="36",boxY="36",txtX="58",txtY="51";
+          let boxW=Math.max(360,Math.min(1180,Math.round(it.text.length*13.5+56))),boxH=54,boxX="36",boxY="36",txtX="58",txtY="51";
           if(hudPos==="bottom-left"){boxX="36";boxY=\`ih-\${boxH+36}\`;txtX="58";txtY=\`h-\${boxH+21}\`}
           else if(hudPos==="bottom-right"){boxX=\`iw-\${boxW}-36\`;boxY=\`ih-\${boxH+36}\`;txtX=\`w-\${boxW}-14\`;txtY=\`h-\${boxH+21}\`}
           else if(hudPos==="top-center"){boxX=\`(iw-\${boxW})/2\`;boxY="36";txtX=\`(w-\${boxW})/2+22\`;txtY="51"}
@@ -641,7 +651,7 @@ async function hIe(t,e){
           hudVf.push(
             \`drawbox=x=\${boxX}:y=\${boxY}:w=\${boxW}:h=\${boxH}:color=0x0d131fcc:t=fill\${enExpr}\`,
             \`drawbox=x=\${boxX}:y=\${boxY}:w=\${boxW}:h=\${boxH}:color=\${it.borderColor}:t=\${it.borderWidth}\${enExpr}\`,
-            \`drawbox=x=\${boxX}:y=\${boxY}:w=6:h=\${boxH}:color=0xf59e0b@1.0:t=fill\${enExpr}\`,
+            \`drawbox=x=\${boxX}:y=\${boxY}:w=6:h=\${boxH}:color=\${it.isLowlight?"0xef4444@1.0":"0xf59e0b@1.0"}:t=fill\${enExpr}\`,
             \`drawtext=fontfile='\${boldEsc}':textfile='\${escLbl}':fontsize=23:fontcolor=white:shadowcolor=black@0.85:shadowx=2:shadowy=2:x=\${txtX}:y=\${txtY}\${enExpr}\`
           );
         }
@@ -1512,11 +1522,12 @@ function GenerateMatchHighlightsButton(){
 }`;
 
 const aiHighlightsCode = fs.readFileSync(new URL('./patches/ai-highlights.js', import.meta.url), 'utf8');
-uiJs = replaceExact(uiJs, oldGeneratePlayerBtn, `${highlightsCodeToAdd}\n${aiHighlightsCode}`, 'GenerateMatchHighlightsButton + AI highlights');
+const lowlightsCode = fs.readFileSync(new URL('./patches/lowlights.js', import.meta.url), 'utf8');
+uiJs = replaceExact(uiJs, oldGeneratePlayerBtn, `${highlightsCodeToAdd}\n${aiHighlightsCode}\n${lowlightsCode}`, 'GenerateMatchHighlightsButton + AI highlights + Lowlights');
 
-// Wire GenerateMatchHighlightsButton + GenerateAiHighlightsButton into MatchVideo toolbar in assets/index-CaMMgvc3.js
+// Wire GenerateMatchHighlightsButton + GenerateAiHighlightsButton + GenerateLowlightsButton into MatchVideo toolbar in assets/index-CaMMgvc3.js
 const oldMatchVideoToolbar = `children:[T,D,O,k,A,j,M,(0,Q.jsx)(\`div\`,{className:\`ml-auto\`,children:(0,Q.jsx)(DocumentationLink,{url:\`https://cs-demo-manager.com/docs/guides/video\`})})]`;
-const newMatchVideoToolbar = `children:[T,(0,Q.jsx)(GenerateMatchHighlightsButton,{}),(0,Q.jsx)(GenerateAiHighlightsButton,{}),D,O,k,A,j,M,(0,Q.jsx)(\`div\`,{className:\`ml-auto\`,children:(0,Q.jsx)(DocumentationLink,{url:\`https://cs-demo-manager.com/docs/guides/video\`})})]`;
+const newMatchVideoToolbar = `children:[T,(0,Q.jsx)(GenerateMatchHighlightsButton,{}),(0,Q.jsx)(GenerateAiHighlightsButton,{}),(0,Q.jsx)(GenerateLowlightsButton,{}),D,O,k,A,j,M,(0,Q.jsx)(\`div\`,{className:\`ml-auto\`,children:(0,Q.jsx)(DocumentationLink,{url:\`https://cs-demo-manager.com/docs/guides/video\`})})]`;
 
 uiJs = replaceExact(uiJs, oldMatchVideoToolbar, newMatchVideoToolbar, 'MatchVideo toolbar');
 

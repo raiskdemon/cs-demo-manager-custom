@@ -4,6 +4,7 @@ build/
 *.log
 app-extracted/
 backups/
+scratch/
 
 check-frames.mjs
 analyze-video.mjs
