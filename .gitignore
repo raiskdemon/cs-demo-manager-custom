@@ -9,3 +9,6 @@ scratch/
 check-frames.mjs
 analyze-video.mjs
 static/
+
+app-*-clean/
+test-*-patch/
