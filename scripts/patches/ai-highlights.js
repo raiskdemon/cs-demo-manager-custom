@@ -119,22 +119,24 @@ function isWildcardKillForAi(k){
 }
 function buildAiHighlightsCandidates({match,steamIds,startSecondsBeforeEvent=3,endSecondsAfterEvent=3}){
   let tr=match.tickrate>0?match.tickrate:64,before=Math.round(tr*startSecondsBeforeEvent),after=Math.round(tr*endSecondsAfterEvent),maxTick=match.tickCount>0?match.tickCount:Number.MAX_SAFE_INTEGER;
+  let kills=(match.kills||[]).map(k=>({...k})).sort((a,b)=>a.tick-b.tick);
+  if(kills.length===0)return[];
   let ssgCollatTickMap=new Map();
-  for(let k of match.kills||[]){
+  for(let k of kills){
     let w=String(k.weaponName??k.weapon_name??"").toLowerCase();
     if((w.includes("ssg")||w.includes("scout"))&&k.killerSteamId){
       let key=`${k.roundNumber}:${k.killerSteamId}:${k.tick}`;
       ssgCollatTickMap.set(key,(ssgCollatTickMap.get(key)??0)+1);
     }
   }
-  for(let k of match.kills||[]){
+  for(let k of kills){
     let key=`${k.roundNumber}:${k.killerSteamId}:${k.tick}`;
     if((ssgCollatTickMap.get(key)??0)>=2){
       k.isSsgCollat=!0;
     }
   }
-  let precisionStreaks=detectPrecisionKillStreaks(match.kills||[],match.shots||[]);
-  for(let k of match.kills||[]){
+  let precisionStreaks=detectPrecisionKillStreaks(kills,match.shots||[]);
+  for(let k of kills){
     let info=precisionStreaks.get(k.id);
     if(info){
       k.isPrecisionStreak=!0;
@@ -143,8 +145,6 @@ function buildAiHighlightsCandidates({match,steamIds,startSecondsBeforeEvent=3,e
       k.precisionStreakIdx=info.streakIndex;
     }
   }
-  let kills=[...(match.kills||[])].sort((a,b)=>a.tick-b.tick);
-  if(kills.length===0)return[];
   let allowed=Array.isArray(steamIds)&&steamIds.length>0?new Set(steamIds):null;
   let firstKillIdPerRound=new Map();
   for(let k of kills){if(!firstKillIdPerRound.has(k.roundNumber))firstKillIdPerRound.set(k.roundNumber,k.id)}

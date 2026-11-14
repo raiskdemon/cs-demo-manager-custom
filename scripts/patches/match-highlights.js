@@ -13,23 +13,24 @@ function isWildcardKill(kill){
   return isNs||isKnife||isZeus||isSsgCollat||isPrecision;
 }
 function buildMatchHighlightsSequences({match,steamIds,rounds,weapons,perspective,minKillsInRound,lifeMode,includeClutches,minClutchOpponents,guaranteeAllPlayers,minSequencesPerPlayer,adaptiveThresholdForLowFraggers,specialFilters,startSecondsBeforeEvent,endSecondsAfterEvent,maxSecondsBetweenEvents,settings,firstSequenceNumber,rapidKillsEnabled=!1,rapidMinKills=3,rapidWindowSeconds=5,alwaysIncludeWildcardKills=!0,maxVideoMinutes=0}){
-  if(steamIds.length===0||match.kills.length===0)return[];
+  if(steamIds.length===0||!match.kills||match.kills.length===0)return[];
+  let allKills=match.kills.map(k=>({...k}));
   let ssgCollatTickMap=new Map();
-  for(let k of match.kills||[]){
+  for(let k of allKills){
     let w=String(k.weaponName??k.weapon_name??"").toLowerCase();
     if((w.includes("ssg")||w.includes("scout"))&&k.killerSteamId){
       let key=`${k.roundNumber}:${k.killerSteamId}:${k.tick}`;
       ssgCollatTickMap.set(key,(ssgCollatTickMap.get(key)??0)+1);
     }
   }
-  for(let k of match.kills||[]){
+  for(let k of allKills){
     let key=`${k.roundNumber}:${k.killerSteamId}:${k.tick}`;
     if((ssgCollatTickMap.get(key)??0)>=2){
       k.isSsgCollat=!0;
     }
   }
-  let precStreaks=detectPrecisionKillStreaks(match.kills||[],match.shots||[]);
-  for(let k of match.kills||[]){
+  let precStreaks=(typeof detectPrecisionKillStreaks==="function"?detectPrecisionKillStreaks(allKills,match.shots||[]):new Map());
+  for(let k of allKills){
     let info=precStreaks.get(k.id);
     if(info){
       k.isPrecisionStreak=!0;
@@ -49,7 +50,7 @@ function buildMatchHighlightsSequences({match,steamIds,rounds,weapons,perspectiv
     for(let d of match.bombsDefused)bombActionPlayersPerRound.add(`${d.roundNumber}:${d.defuserSteamId}`);
   }
   let currentSegmentIndex=new Map(),lastBotControlState=new Map(),killSegmentKeyById=new Map(),killsPerSegment=new Map(),totalMatchKillsPerPlayer=new Map();
-  for(let kill of match.kills){
+  for(let kill of allKills){
     if(!firstKillIdPerRound.has(kill.roundNumber))firstKillIdPerRound.set(kill.roundNumber,kill.id);
     if(kill.victimSteamId){
       let vKey=`${kill.roundNumber}:${kill.victimSteamId}`;
@@ -86,7 +87,7 @@ function buildMatchHighlightsSequences({match,steamIds,rounds,weapons,perspectiv
   }
   let roundsSelected=Array.isArray(rounds)&&rounds.length>0;
   let weaponsSelected=Array.isArray(weapons)&&weapons.length>0;
-  let kills=match.kills.filter(kill=>{
+  let kills=allKills.filter(kill=>{
     if(!kill.killerSteamId||!steamIds.includes(kill.killerSteamId))return!1;
     if(roundsSelected&&!rounds.includes(kill.roundNumber))return!1;
     let wildcard=alwaysIncludeWildcardKills&&isWildcardKill(kill);
@@ -168,7 +169,7 @@ function buildMatchHighlightsSequences({match,steamIds,rounds,weapons,perspectiv
       let count=rawSequences.filter(s=>s.primaryPlayerSteamId===sid||s.playerCameras.some(c=>c.playerSteamId===sid)).length;
       if(count<minSequencesPerPlayer){
         let needed=minSequencesPerPlayer-count;
-        let pKills=match.kills.filter(k=>k.killerSteamId===sid&&(!roundsSelected||rounds.includes(k.roundNumber))).sort((a,b)=>b.tick-a.tick);
+        let pKills=allKills.filter(k=>k.killerSteamId===sid&&(!roundsSelected||rounds.includes(k.roundNumber))).sort((a,b)=>b.tick-a.tick);
         for(let pk of pKills){
           if(needed<=0)break;
           let kStart=Math.max(1,pk.tick-ticksBefore),kEnd=Math.min(maxTick,pk.tick+ticksAfter);
@@ -204,7 +205,7 @@ function buildMatchHighlightsSequences({match,steamIds,rounds,weapons,perspectiv
     }
   }
   for(let seq of mergedRaw){
-    let sKills=match.kills.filter(k=>k.tick>=seq.startTick&&k.tick<=seq.endTick).sort((a,b)=>a.tick-b.tick);
+    let sKills=allKills.filter(k=>k.tick>=seq.startTick&&k.tick<=seq.endTick).sort((a,b)=>a.tick-b.tick);
     let ffIntervals=[];
     for(let i=0;i<sKills.length-1;i++){
       let k1=sKills[i],k2=sKills[i+1];
