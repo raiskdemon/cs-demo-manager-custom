@@ -230,26 +230,22 @@ if (!adaptedHie.includes('async function EM(t,e){')) {
   throw new Error('Failed to adapt hIe -> EM in server-video-patch.js');
 }
 
-const serverAliases = `
-var pT = K;
-var R_ = p;
-var hg = wM;
-var jt = Vn;
-var Ki = JD;
-var fg = Zj;
-var hT = hM;
-var Jgt = TM;
-var Br = ls;
-var Pr = us;
-var Xs = $j;
-var Bs = ss;
-var Ks = aF;
-var Bl = HN;
-var AIe = xM;
-`;
+// Adapt identifiers directly without injecting global aliases that could collide with 3.21.0 functions (e.g. pT, jt, hT)
+adaptedHie = adaptedHie.replaceAll('pT.default', 'K.default');
+adaptedHie = adaptedHie.replaceAll('pT.', 'K.');
+adaptedHie = adaptedHie.replaceAll('R_.default', 'p.default');
+adaptedHie = adaptedHie.replaceAll('R_.', 'p.');
+adaptedHie = adaptedHie.replaceAll('hg(', 'wM(');
+adaptedHie = adaptedHie.replaceAll('jt()', 'Vn()');
+adaptedHie = adaptedHie.replaceAll('Ki()', 'JD()');
+adaptedHie = adaptedHie.replaceAll('fg(', 'Zj(');
+adaptedHie = adaptedHie.replaceAll('hT(', 'hM(');
+adaptedHie = adaptedHie.replaceAll('Jgt(', 'TM(');
+adaptedHie = adaptedHie.replaceAll('Br.', 'ls.');
+adaptedHie = adaptedHie.replaceAll('Pr.', 'us.');
+adaptedHie = adaptedHie.replaceAll('new Xs', 'new $j');
 
-const fullEmReplacement = `${serverAliases}\n${adaptedHie}`;
-serverJs = replaceExact(serverJs, oldEm, fullEmReplacement, 'EM (generateVideoWithFFmpeg + intro/outro/circus/lowlights)');
+serverJs = replaceExact(serverJs, oldEm, adaptedHie, 'EM (generateVideoWithFFmpeg + intro/outro/circus/lowlights)');
 
 // Server 10. fI (buildVideos)
 const oldFi = `async function fI({signal:e,...t}){Yj(e);let{recordingSystem:n,recordingOutput:r,encoderSoftware:i,framerate:a,sequences:o,outputFolderPath:s,concatenateSequences:c,outputFileName:l,ffmpegSettings:u,game:d,onSequenceStart:f,onConcatenateSequencesStart:p}=t;for(let[t,c]of o.entries())f(c.number,t+1),i===ss.FFmpeg?await EM({ffmpegExecutablePath:aF(u.customExecutableLocation)?await HN():u.customExecutableLocation,recordingSystem:n,recordingOutput:r,game:d,recordAudio:c.recordAudio,audioBitrate:u.audioBitrate,constantRateFactor:u.constantRateFactor,videoContainer:u.videoContainer,videoCodec:u.videoCodec,audioCodec:u.audioCodec,inputParameters:u.inputParameters,outputParameters:u.outputParameters,framerate:a,outputFolderPath:s,sequence:c},e):await xM({recordingSystem:n,game:d,recordAudio:c.recordAudio,framerate:a,outputFolderPath:s,sequence:c},e);if(c&&o.length>1){p();let n=dI(l,{mapName:t.mapName,checksum:t.checksum,game:t.game,encoderSoftware:t.encoderSoftware,width:t.width,height:t.height,framerate:t.framerate});await OM({ffmpegExecutablePath:aF(u.customExecutableLocation)?await HN():u.customExecutableLocation,outputFolderPath:s,sequences:o,videoContainer:u.videoContainer,fileName:n},e)}}`;
