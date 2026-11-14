@@ -341,7 +341,7 @@ function buildAiHighlightsSequences({match,steamIds,maxDurationSeconds=180,inclu
     showAssists:settings.showAssists,
     recordAudio:settings.recordAudio,
     playerVoicesEnabled:settings.playerVoicesEnabled,
-    playersOptions:buildPlayersOptions(match.players,c.playerCameras.map(cam=>cam.playerSteamId).filter(Boolean)),
+    playersOptions:buildPlayersOptions({players:match.players,highlightedSteamIds:c.playerCameras.map(cam=>cam.playerSteamId).filter(Boolean),playerVoicesEnabled:Boolean(settings.playerVoicesEnabled)}),
     playerCameras:c.playerCameras,
     cameras:[]
   }));

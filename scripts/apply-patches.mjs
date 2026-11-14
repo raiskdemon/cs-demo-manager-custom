@@ -68,6 +68,11 @@ function adaptUiPatchTo321(code) {
 // ==========================================
 console.log('[apply-patches] Applying UI patches...');
 
+// UI 0. buildPlayersOptions safe polymorphic wrapper
+const oldBpo = 'function buildPlayersOptions({players:u,highlightedSteamIds:f,voiceSteamIds:p,playerVoicesEnabled:O}){let j=getVoiceSteamIds({players:u,voiceSteamIds:p,playerVoicesEnabled:O});return u.map(u=>({steamId:u.steamId,playerName:u.name,showKill:!0,highlightKill:f.includes(u.steamId),isVoiceEnabled:j.includes(u.steamId)}))}';
+const newBpo = 'function buildPlayersOptions(u,f,p,O){if(Array.isArray(u)){u={players:u,highlightedSteamIds:f||[],voiceSteamIds:p||[],playerVoicesEnabled:O};}let{players:a,highlightedSteamIds:b=[],voiceSteamIds:c=[],playerVoicesEnabled:d}=u||{};let j=getVoiceSteamIds({players:a,voiceSteamIds:c,playerVoicesEnabled:d});return(a||[]).map(x=>({steamId:x.steamId,playerName:x.name,showKill:!0,highlightKill:(b||[]).includes(x.steamId),isVoiceEnabled:(j||[]).includes(x.steamId)}))}';
+uiJs = replaceExact(uiJs, oldBpo, newBpo, 'buildPlayersOptions safe wrapper');
+
 // UI 1. VideoCodecInput
 const oldVideoCodecInput = `function VideoCodecInput(){let u=(0,xt.c)(7),{settings:f,updateSettings:p}=useVideoSettings(),t0;u[0]!==f.ffmpegSettings.videoCodec||u[1]!==p?(t0=async u=>{let O=u.target.value.trim();O===\`\`?u.target.value=Zl.video.ffmpegSettings.videoCodec:O!==f.ffmpegSettings.videoCodec&&await p({ffmpegSettings:{videoCodec:O}})},u[0]=f.ffmpegSettings.videoCodec,u[1]=p,u[2]=t0):t0=u[2];let O=t0,j;u[3]===Symbol.for(\`react.memo_cache_sentinel\`)?(j=(0,$.jsx)(Trans,{id:\`XZW4KI\`}),u[3]=j):j=u[3];let I;return u[4]!==O||u[5]!==f.ffmpegSettings.videoCodec?(I=(0,$.jsx)(TextInput,{label:j,onBlur:O,defaultValue:f.ffmpegSettings.videoCodec},f.ffmpegSettings.videoCodec),u[4]=O,u[5]=f.ffmpegSettings.videoCodec,u[6]=I):I=u[6],I}`;
 const newVideoCodecInput = `const GPU_CODEC_PRESETS=[{value:"h264_nvenc",label:"h264_nvenc (GPU NVIDIA - Rápido)"},{value:"hevc_nvenc",label:"hevc_nvenc (GPU NVIDIA HEVC)"},{value:"h264_amf",label:"h264_amf (GPU AMD)"},{value:"h264_qsv",label:"h264_qsv (GPU Intel)"},{value:"libx264",label:"libx264 (CPU Padrão)"},{value:"libx265",label:"libx265 (CPU HEVC)"}];

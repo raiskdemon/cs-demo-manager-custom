@@ -378,7 +378,7 @@ function buildLowlightsSequences({match,steamIds,filters={},maxDurationSeconds=1
     showAssists:settings.showAssists,
     recordAudio:settings.recordAudio,
     playerVoicesEnabled:settings.playerVoicesEnabled,
-    playersOptions:buildPlayersOptions(match.players,[c.steamId]),
+    playersOptions:buildPlayersOptions({players:match.players,highlightedSteamIds:[c.steamId],playerVoicesEnabled:Boolean(settings.playerVoicesEnabled)}),
     playerCameras:[{
       tick:c.startTick,
       playerSteamId:c.steamId,

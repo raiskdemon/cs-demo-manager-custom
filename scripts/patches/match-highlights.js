@@ -234,7 +234,7 @@ function buildMatchHighlightsSequences({match,steamIds,rounds,weapons,perspectiv
     showAssists:settings.showAssists,
     recordAudio:settings.recordAudio,
     playerVoicesEnabled:settings.playerVoicesEnabled,
-    playersOptions:buildPlayersOptions(match.players,seq.playerCameras.map(c=>c.playerSteamId).filter(Boolean)),
+    playersOptions:buildPlayersOptions({players:match.players,highlightedSteamIds:seq.playerCameras.map(c=>c.playerSteamId).filter(Boolean),playerVoicesEnabled:Boolean(settings.playerVoicesEnabled)}),
     playerCameras:seq.playerCameras,
     fastForwardIntervals:seq.fastForwardIntervals||[],
     cameras:[]
