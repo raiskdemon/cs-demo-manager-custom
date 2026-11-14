@@ -44,9 +44,23 @@ if (serverJs.includes('escFfPath') && fs.existsSync(serverBakPath)) {
 }
 
 let uiJs = fs.readFileSync(uiJsPath, 'utf8');
-if (uiJs.includes('GenerateMatchHighlightsButton') && fs.existsSync(uiBakPath)) {
+if ((uiJs.includes('GenerateMatchHighlightsButton') || uiJs.includes('GPU_CODEC_PRESETS')) && fs.existsSync(uiBakPath)) {
   console.log(`[apply-patches] Restoring ${uiJsFile} from clean backup before re-patching...`);
   uiJs = fs.readFileSync(uiBakPath, 'utf8');
+}
+
+function adaptUiPatchTo321(code) {
+  return code
+    .replace(/\(0,\s*Q\.jsx\)/g, '(0,$.jsx)')
+    .replace(/\(0,\s*Q\.jsxs\)/g, '(0,$.jsxs)')
+    .replace(/\(0,\s*W\.use/g, '(0,Q.use')
+    .replace(/\bzg\./g, 'Kg.')
+    .replace(/\bMu\(\)/g, 'hd()')
+    .replace(/\bVs\./g, 'gc.')
+    .replace(/\bFs\(/g, 'lc(')
+    .replace(/\bLg\./g, 'Ug.')
+    .replace(/\bNu\./g, 'gd.')
+    .replace(/\bSl\./g, 'tu.');
 }
 
 // ==========================================
@@ -61,24 +75,17 @@ function VideoCodecInput(){
   let{settings:f,updateSettings:p}=useVideoSettings(),cur=f.ffmpegSettings.videoCodec||"libx264";
   let hasPreset=GPU_CODEC_PRESETS.some(x=>x.value===cur);
   let options=hasPreset?GPU_CODEC_PRESETS:[...GPU_CODEC_PRESETS,{value:cur,label:\`\${cur} (Personalizado)\`}];
-  return(0,$.jsx)(Select,{label:(0,$.jsx)(Trans,{id:\`XZW4KI\`}),options,value:cur,onChange:async v=>{if(v)await p({ffmpegSettings:{videoCodec:v}})}});
+  return(0,$.jsx)(Select$1,{label:(0,$.jsx)(Trans,{id:\`XZW4KI\`}),options,value:cur,onChange:async v=>{if(v)await p({ffmpegSettings:{videoCodec:v}})}});
 }`;
 uiJs = replaceExact(uiJs, oldVideoCodecInput, newVideoCodecInput, 'VideoCodecInput');
 
-// UI 2. GeneratePlayerSequencesButton + AI highlights + Lowlights
+// UI 2. GeneratePlayerSequencesButton + Match Highlights + AI highlights + Lowlights
 const oldGeneratePlayerBtn = `function GeneratePlayerSequencesButton(){let u=(0,xt.c)(5),{showDialog:f}=useDialog(),t0;u[0]===f?t0=u[1]:(t0=()=>{f((0,$.jsx)(SelectPlayerDialog,{}))},u[0]=f,u[1]=t0);let p=t0,O;u[2]===Symbol.for(\`react.memo_cache_sentinel\`)?(O=(0,$.jsx)(Trans,{id:\`dbczBE\`}),u[2]=O):O=u[2];let j;return u[3]===p?j=u[4]:(j=(0,$.jsx)(Button$1,{onClick:p,children:O}),u[3]=p,u[4]=j),j}`;
-const highlightsCodeToAdd = `function GeneratePlayerSequencesButton(){let u=(0,xt.c)(5),{showDialog:f}=useDialog(),t0;u[0]===f?t0=u[1]:(t0=()=>{f((0,$.jsx)(SelectPlayerDialog,{}))},u[0]=f,u[1]=t0);let p=t0,O;u[2]===Symbol.for(\`react.memo_cache_sentinel\`)?(O=(0,$.jsx)(Trans,{id:\`dbczBE\`}),u[2]=O):O=u[2];let j;return u[3]===p?j=u[4]:(j=(0,$.jsx)(Button$1,{onClick:p,children:O}),u[3]=p,u[4]=j),j}
-
-var Q = $;
-var zg = Kg;
-
-function GenerateMatchHighlightsButton(){
-  let{showDialog}=useDialog();
-  return(0,$.jsx)(Button$1,{variant:Kg.Primary,onClick:()=>{showDialog((0,$.jsx)(GenerateMatchHighlightsDialog,{}))},children:"Gerar Highlights da Partida"});
-}`;
+const matchHighlightsCode = fs.readFileSync(path.join(patchesDir, 'match-highlights.js'), 'utf8');
 const aiHighlightsCode = fs.readFileSync(path.join(patchesDir, 'ai-highlights.js'), 'utf8');
 const lowlightsCode = fs.readFileSync(path.join(patchesDir, 'lowlights.js'), 'utf8');
-uiJs = replaceExact(uiJs, oldGeneratePlayerBtn, `${highlightsCodeToAdd}\n${aiHighlightsCode}\n${lowlightsCode}`, 'GeneratePlayerSequencesButton + AI highlights + Lowlights');
+const adaptedUiCustomCode = adaptUiPatchTo321(`${matchHighlightsCode}\n${aiHighlightsCode}\n${lowlightsCode}`);
+uiJs = replaceExact(uiJs, oldGeneratePlayerBtn, `${oldGeneratePlayerBtn}\n${adaptedUiCustomCode}`, 'GeneratePlayerSequencesButton + Match/AI Highlights + Lowlights');
 
 // UI 3. MatchVideo toolbar
 const oldMatchVideoToolbar = `u[7]===Symbol.for(\`react.memo_cache_sentinel\`)?(V=(0,$.jsxs)(\`div\`,{className:\`flex flex-wrap items-center gap-8\`,children:[p,O,j,I,R,z,B,(0,$.jsx)(\`div\`,{className:\`ml-auto\`,children:(0,$.jsx)(DocumentationLink,{url:\`https://cs-demo-manager.com/docs/guides/video\`})})]}),u[7]=V):V=u[7];`;
@@ -212,10 +219,16 @@ serverJs = replaceExact(
 const oldEm = `async function EM(e,t){logger.debug(\`Generating video with FFmpeg\`),logger.debug(e);let{tgaFiles:n,wavFilePath:r,videoFilePath:i}=await hM(e),{ffmpegExecutablePath:a,framerate:o,inputParameters:s,videoCodec:c,audioCodec:l,audioBitrate:u,constantRateFactor:d,outputParameters:f,recordingSystem:m,game:h,sequence:g,outputFolderPath:_,videoContainer:v,recordingOutput:y,recordAudio:b}=e;await K.default.ensureDir(_);let x=Zj(_,g,v);if(m===ls.HLAE&&y===us.Video){if(!i)throw logger.error(\`Video file path is null for HLAE video output\`),new $j;let e=[\`-y\`];s!==\`\`&&e.push(s),e.push(\`-i "\${i}"\`);let n=b&&r;if(n){let n=await TM(a,r,l,u,t);e.push(\`-i "\${n}"\`)}return e.push(\`-c copy\`,\`-map 0:v:0\`),n&&e.push(\`-map 1:a:0\`),e.push(\`"\${x}"\`),f!==\`\`&&e.push(f),await wM(a,e,t)}let S,C=p.default.dirname(n[0]);if(m===ls.HLAE)S=p.default.join(C,\`%05d.tga\`);else{let e=Qj(g);S=p.default.join(C,h===$.Game.CSGO?\`\${e}%04d.tga\`:\`\${e}%08d.tga\`)}let w=[\`-y\`,\`-framerate \${o}\`];s!==\`\`&&w.push(s),w.push(\`-i "\${S}"\`);let T=r?await K.default.pathExists(r):!1,E=b&&T;E&&w.push(\`-i "\${r}"\`),w.push(\`-vcodec \${c}\`),E&&w.push(\`-acodec \${l}\`,\`-b:a \${u}K\`),f===\`\`?w.push(\`-pix_fmt yuv420p\`,\`-crf \${d}\`):w.push(f),w.push(\`"\${x}"\`),await wM(a,w,t)}`;
 
 let adaptedHie = fs.readFileSync(path.join(patchesDir, 'server-video-patch.js'), 'utf8');
+if (adaptedHie.includes('var PX=v(')) {
+  throw new Error('server-video-patch.js still contains leftover 3.20 code (var PX=v()');
+}
 adaptedHie = adaptedHie.replaceAll('On(H)', 'Qj(H)');
 adaptedHie = adaptedHie.replaceAll('On(', 'Qj(');
 adaptedHie = adaptedHie.replaceAll('y.Game', '$.Game');
 adaptedHie = adaptedHie.replace('async function hIe(t,e){', 'async function EM(t,e){\nvar hIe = EM;');
+if (!adaptedHie.includes('async function EM(t,e){')) {
+  throw new Error('Failed to adapt hIe -> EM in server-video-patch.js');
+}
 
 const serverAliases = `
 var pT = K;
@@ -254,7 +267,10 @@ buildVideos = buildVideos.replaceAll('AIe({', 'xM({');
 buildVideos = buildVideos.replaceAll('await hIe({', 'await EM({');
 buildVideos = buildVideos.replaceAll('T_e(l,', 'dI(l,');
 buildVideos = buildVideos.replaceAll('mIe({', 'OM({');
-buildVideos = buildVideos.replace('async function Ayt({signal:t,...e}){yA(t);', 'async function fI({signal:t,...e}){Yj(t);\nvar Ayt = fI;');
+buildVideos = buildVideos.replace(/async function Ayt\(\{signal:t,\.\.\.e\}\)\{\s*yA\(t\);/, 'async function fI({signal:t,...e}){\n  Yj(t);\n  var Ayt = fI;');
+if (!buildVideos.includes('async function fI(')) {
+  throw new Error('Failed to adapt Ayt -> fI in server-buildvideos-patch.js');
+}
 
 serverJs = replaceExact(serverJs, oldFi, buildVideos, 'fI (buildVideos orchestration)');
 

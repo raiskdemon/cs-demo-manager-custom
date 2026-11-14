@@ -1087,4 +1087,3 @@ function computeLowlightsAwards(players, kills, clutches, shots, damages, mapNam
 
   return { topBagre, awards: finalAwards, bagreStats: playerBagreStats };
 }
-var PX=v(require("node:path")),VX=v(pe());
