@@ -117,6 +117,40 @@ function isWildcardKillForAi(k){
   let isPrecision=Boolean(k.isPrecisionStreak);
   return isNs||isKnife||isZeus||isSsgCollat||isPrecision;
 }
+function buildDroneTransitionData(play,tr,droneHeight=750){
+  let fk=play.firstKill,lk=play.lastKill;
+  if(!fk||typeof fk.killerX!=="number"||typeof fk.killerY!=="number")return null;
+  if(fk.killerX===0&&fk.killerY===0&&(fk.killerZ===0||fk.killerZ===void 0))return null;
+  let kx=fk.killerX,ky=fk.killerY,kz=fk.killerZ??0;
+  let vx=fk.victimX??kx,vy=fk.victimY??ky,vz=fk.victimZ??kz;
+  let dx=vx-kx,dy=vy-ky;
+  let yaw=Math.round(Math.atan2(dy,dx)*(180/Math.PI));
+  if(Number.isNaN(yaw))yaw=0;
+  let rad=(yaw*Math.PI)/180,skyDist=180;
+  let skyX=Math.round(kx-skyDist*Math.cos(rad));
+  let skyY=Math.round(ky-skyDist*Math.sin(rad));
+  let skyZ=Math.round(kz+droneHeight);
+  let skyPitch=60;
+  let targetX=Math.round(kx),targetY=Math.round(ky),targetZ=Math.round(kz+64),targetPitch=10;
+  let lkx=lk?.killerX??kx,lky=lk?.killerY??ky,lkz=lk?.killerZ??kz;
+  let flyOutEndX=Math.round(lkx-skyDist*Math.cos(rad));
+  let flyOutEndY=Math.round(lky-skyDist*Math.sin(rad));
+  let flyOutEndZ=Math.round(lkz+droneHeight);
+  return{
+    flyIn:{skyX,skyY,skyZ,skyPitch,targetX,targetY,targetZ,targetPitch,yaw},
+    flyOut:{
+      startX:Math.round(lkx),
+      startY:Math.round(lky),
+      startZ:Math.round(lkz+64),
+      endX:flyOutEndX,
+      endY:flyOutEndY,
+      endZ:flyOutEndZ,
+      startPitch:10,
+      endPitch:60,
+      yaw
+    }
+  };
+}
 function buildAiHighlightsCandidates({match,steamIds,startSecondsBeforeEvent=3,endSecondsAfterEvent=3}){
   let tr=match.tickrate>0?match.tickrate:64,before=Math.round(tr*startSecondsBeforeEvent),after=Math.round(tr*endSecondsAfterEvent),maxTick=match.tickCount>0?match.tickCount:Number.MAX_SAFE_INTEGER;
   let kills=(match.kills||[]).map(k=>({...k})).sort((a,b)=>a.tick-b.tick);
@@ -247,15 +281,40 @@ function buildAiHighlightsCandidates({match,steamIds,startSecondsBeforeEvent=3,e
       }
       let candSec=Math.max(1,(endTick-startTick)/tr-fastForwardSaved);
       let player=(match.players||[]).find(p=>p.steamId===first.killerSteamId);
-      candidates.push({steamId:first.killerSteamId,playerName:player?.name??first.killerName??"",roundNumber:first.roundNumber,kills:n,score:Math.round(score),startTick,endTick,seconds:candSec,fastForwardIntervals,isWildcard,wildcardCount:(ns+kn+zeus+ssgCollat+precCount),description:`${n}K${tags.length>0?" • "+tags.join(", "):""}`});
+      candidates.push({
+        steamId:first.killerSteamId,
+        playerName:player?.name??first.killerName??"",
+        roundNumber:first.roundNumber,
+        kills:n,
+        score:Math.round(score),
+        startTick,
+        endTick,
+        seconds:candSec,
+        fastForwardIntervals,
+        isWildcard,
+        wildcardCount:(ns+kn+zeus+ssgCollat+precCount),
+        description:`${n}K${tags.length>0?" • "+tags.join(", "):""}`,
+        firstKill:{
+          killerX:first.killerX,killerY:first.killerY,killerZ:first.killerZ,
+          victimX:first.victimX,victimY:first.victimY,victimZ:first.victimZ,
+          tick:first.tick
+        },
+        lastKill:{
+          killerX:last.killerX,killerY:last.killerY,killerZ:last.killerZ,
+          victimX:last.victimX,victimY:last.victimY,victimZ:last.victimZ,
+          tick:last.tick
+        }
+      });
     }
   }
   return candidates;
 }
-function buildAiHighlightsSequences({match,steamIds,maxDurationSeconds=180,includeIntro=!0,includeOutro=!0,alwaysIncludeWildcardKills=!0,settings,firstSequenceNumber=1,startSecondsBeforeEvent=3,endSecondsAfterEvent=3}){
+function buildAiHighlightsSequences({match,steamIds,maxDurationSeconds=180,includeIntro=!0,includeOutro=!0,alwaysIncludeWildcardKills=!0,enableDroneTransitions=!1,droneHeight=750,settings,firstSequenceNumber=1,startSecondsBeforeEvent=3,endSecondsAfterEvent=3}){
   let tr=match.tickrate>0?match.tickrate:64;
   let candidates=buildAiHighlightsCandidates({match,steamIds,startSecondsBeforeEvent,endSecondsAfterEvent});
   let introExtra=includeIntro?8:0,outroExtra=includeOutro?5:0;
+  let flyInTicks=Math.round(tr*1.5),flyOutTicks=Math.round(tr*1.25);
+  let dronePerSeqSec=enableDroneTransitions?((flyInTicks+flyOutTicks)/tr):0;
   let budget=Math.max(10,maxDurationSeconds-introExtra-outroExtra),used=0,chosen=[],perPlayer=new Map(),remaining=[...candidates];
   let wildcardPlaysCount=0;
   let minGapTicks=Math.round(tr*4);
@@ -284,7 +343,7 @@ function buildAiHighlightsSequences({match,steamIds,maxDurationSeconds=180,inclu
     }
     if(bestIdx===-1)break;
     let pick=remaining.splice(bestIdx,1)[0];
-    chosen.push(pick);used+=pick.seconds;perPlayer.set(pick.steamId,(perPlayer.get(pick.steamId)??0)+1);
+    chosen.push(pick);used+=pick.seconds+dronePerSeqSec;perPlayer.set(pick.steamId,(perPlayer.get(pick.steamId)??0)+1);
   }
 
   // Merge adjacent or overlapping plays in the SAME round into continuous multi-camera sequences
@@ -306,6 +365,7 @@ function buildAiHighlightsSequences({match,steamIds,maxDurationSeconds=180,inclu
         prev.score+=c.score;
         if(c.isWildcard)prev.isWildcard=!0;
         if(c.fastForwardIntervals)prev.fastForwardIntervals=[...(prev.fastForwardIntervals||[]),...c.fastForwardIntervals];
+        if(c.lastKill)prev.lastKill=c.lastKill;
         let lastCam=prev.playerCameras[prev.playerCameras.length-1];
         if(lastCam.playerSteamId!==c.steamId){
           prev.playerCameras.push({
@@ -328,23 +388,38 @@ function buildAiHighlightsSequences({match,steamIds,maxDurationSeconds=180,inclu
     }
   }
 
-  let totalChosenSeconds=mergedPlays.reduce((acc,c)=>acc+c.seconds,0);
-  let sequences=mergedPlays.map((c,i)=>({
-    number:firstSequenceNumber+i,
-    startTick:c.startTick,
-    endTick:c.endTick,
-    roundNumber:c.roundNumber,
-    fastForwardIntervals:c.fastForwardIntervals||[],
-    showOnlyDeathNotices:settings.showOnlyDeathNotices,
-    deathNoticesDuration:settings.deathNoticesDuration,
-    showXRay:settings.showXRay,
-    showAssists:settings.showAssists,
-    recordAudio:settings.recordAudio,
-    playerVoicesEnabled:settings.playerVoicesEnabled,
-    playersOptions:buildPlayersOptions({players:match.players,highlightedSteamIds:c.playerCameras.map(cam=>cam.playerSteamId).filter(Boolean),playerVoicesEnabled:Boolean(settings.playerVoicesEnabled)}),
-    playerCameras:c.playerCameras,
-    cameras:[]
-  }));
+  let totalChosenSeconds=mergedPlays.reduce((acc,c)=>acc+c.seconds,0)+(enableDroneTransitions?mergedPlays.length*dronePerSeqSec:0);
+  let sequences=mergedPlays.map((c,i)=>{
+    let droneData=enableDroneTransitions?buildDroneTransitionData(c,tr,droneHeight):null;
+    let actStartTick=c.startTick;
+    let actEndTick=c.endTick;
+    let seqStartTick=droneData?Math.max(1,actStartTick-flyInTicks):actStartTick;
+    let seqEndTick=droneData?actEndTick+flyOutTicks:actEndTick;
+    let playerCameras=droneData
+      ?c.playerCameras.map(cam=>({...cam,tick:Math.max(cam.tick,actStartTick)}))
+      :c.playerCameras;
+    return {
+      number:firstSequenceNumber+i,
+      startTick:seqStartTick,
+      endTick:seqEndTick,
+      roundNumber:c.roundNumber,
+      isCinematicDrone:Boolean(droneData),
+      actionStartTick:actStartTick,
+      actionEndTick:actEndTick,
+      droneFlyIn:droneData?{startTick:seqStartTick,endTick:actStartTick,...droneData.flyIn}:void 0,
+      droneFlyOut:droneData?{startTick:actEndTick,endTick:seqEndTick,...droneData.flyOut}:void 0,
+      fastForwardIntervals:c.fastForwardIntervals||[],
+      showOnlyDeathNotices:settings.showOnlyDeathNotices,
+      deathNoticesDuration:settings.deathNoticesDuration,
+      showXRay:settings.showXRay,
+      showAssists:settings.showAssists,
+      recordAudio:settings.recordAudio,
+      playerVoicesEnabled:settings.playerVoicesEnabled,
+      playersOptions:buildPlayersOptions({players:match.players,highlightedSteamIds:c.playerCameras.map(cam=>cam.playerSteamId).filter(Boolean),playerVoicesEnabled:Boolean(settings.playerVoicesEnabled)}),
+      playerCameras:playerCameras,
+      cameras:[]
+    };
+  });
   return{sequences,plays:mergedPlays,totalSeconds:totalChosenSeconds+(mergedPlays.length>0?introExtra+outroExtra:0),candidatesCount:candidates.length,wildcardPlaysCount};
 }
 function GenerateAiHighlightsDialog(){
@@ -363,11 +438,12 @@ function GenerateAiHighlightsDialog(){
   let[enableSlowMotion,setEnableSlowMotion]=(0,W.useState)(settings.enableSlowMotion??!0);
   let[enableFastForward,setEnableFastForward]=(0,W.useState)(settings.enableFastForward??!0);
   let[enableSequenceTransitions,setEnableSequenceTransitions]=(0,W.useState)(settings.enableSequenceTransitions??!0);
+  let[enableDroneTransitions,setEnableDroneTransitions]=(0,W.useState)(settings.enableDroneTransitions??!1);
   let[hideGameWindow,setHideGameWindow]=(0,W.useState)(settings.hideGameWindow??!0);
   let[isStartingRecording,setIsStartingRecording]=(0,W.useState)(!1);
   let durationOptions=[{value:60,label:"Até 1 minuto"},{value:90,label:"Até 1 min 30 s"},{value:120,label:"Até 2 minutos"},{value:180,label:"Até 3 minutos (Recomendado)"}];
   let hudPositionOptions=[{value:"top-left",label:"Canto Superior Esquerdo (Recomendado)"},{value:"bottom-left",label:"Canto Inferior Esquerdo"},{value:"bottom-right",label:"Canto Inferior Direito"},{value:"top-center",label:"Topo Centralizado"},{value:"top-right",label:"Canto Superior Direito"},{value:"none",label:"Desativado (Sem nome na tela)"}];
-  let result=(0,W.useMemo)(()=>buildAiHighlightsSequences({match,steamIds:selectedSteamIds,maxDurationSeconds,includeIntro:showIntroScreen,includeOutro:showOutroScreen,alwaysIncludeWildcardKills,settings,firstSequenceNumber:1}),[match,selectedSteamIds,maxDurationSeconds,showIntroScreen,showOutroScreen,alwaysIncludeWildcardKills,settings]);
+  let result=(0,W.useMemo)(()=>buildAiHighlightsSequences({match,steamIds:selectedSteamIds,maxDurationSeconds,includeIntro:showIntroScreen,includeOutro:showOutroScreen,alwaysIncludeWildcardKills,enableDroneTransitions,settings,firstSequenceNumber:1}),[match,selectedSteamIds,maxDurationSeconds,showIntroScreen,showOutroScreen,alwaysIncludeWildcardKills,enableDroneTransitions,settings]);
   let formatDur=sec=>{let r=Math.max(0,Math.round(sec)),m=Math.floor(r/60),s=r%60;return`${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`};
   let applyTimelineOnly=()=>{
     if(result.sequences.length===0)return;
@@ -377,10 +453,10 @@ function GenerateAiHighlightsDialog(){
   let recordNow=async()=>{
     if(result.sequences.length===0||isStartingRecording)return;
     setIsStartingRecording(!0);
-    await updateSettings({hideGameWindow,hudPosition,showIntroScreen,showOutroScreen,showFunAwards,enableKillCounter,enableSlowMotion,enableFastForward,enableSequenceTransitions});
+    await updateSettings({hideGameWindow,hudPosition,showIntroScreen,showOutroScreen,showFunAwards,enableKillCounter,enableSlowMotion,enableFastForward,enableSequenceTransitions,enableDroneTransitions});
     dispatch(Fs({demoFilePath:match.demoFilePath,sequences:result.sequences}));
     try{
-      let payload={...settings,concatenateSequences:!0,hideGameWindow,hudPosition,showIntroScreen,showOutroScreen,showFunAwards,enableKillCounter,enableSlowMotion,enableFastForward,enableSequenceTransitions,checksum:match.checksum,game:match.game,tickrate:match.tickrate,demoPath:match.demoFilePath,mapName:match.mapName,sequences:result.sequences};
+      let payload={...settings,concatenateSequences:!0,hideGameWindow,hudPosition,showIntroScreen,showOutroScreen,showFunAwards,enableKillCounter,enableSlowMotion,enableFastForward,enableSequenceTransitions,enableDroneTransitions,checksum:match.checksum,game:match.game,tickrate:match.tickrate,demoPath:match.demoFilePath,mapName:match.mapName,sequences:result.sequences};
       await client.send({name:Lg.AddVideoToQueue,payload});
       await client.send({name:Lg.ResumeVideoQueue});
       hideDialog();
@@ -417,6 +493,7 @@ function GenerateAiHighlightsDialog(){
         (0,Q.jsx)(Checkbox,{label:"Tela de encerramento no final do vídeo (MVP e Destaques)",isChecked:showOutroScreen,onChange:e=>setShowOutroScreen(e.target.checked)}),
         (0,Q.jsx)(Checkbox,{label:"Troféus Engraçados da Partida (Destaque cômico para todos os jogadores: Porta da Esperança, Cearense Lover, Bob Marley, Pikachu, etc.)",isChecked:showFunAwards,onChange:e=>setShowFunAwards(e.target.checked)}),
         (0,Q.jsx)(Checkbox,{label:"Transição suave (Fade) entre os lances",isChecked:enableSequenceTransitions,onChange:e=>setEnableSequenceTransitions(e.target.checked)}),
+        (0,Q.jsx)(Checkbox,{label:"Transição aérea de Drone (Skycam: visão do céu até o jogador e voo entre lances)",isChecked:enableDroneTransitions,onChange:e=>setEnableDroneTransitions(e.target.checked)}),
         (0,Q.jsx)(Checkbox,{label:"Gravar com o CS oculto em 2º plano",isChecked:hideGameWindow,onChange:e=>setHideGameWindow(e.target.checked)})
       ]}),
       (0,Q.jsxs)("div",{className:"flex flex-col gap-y-4 rounded-4 border border-gray-400 p-8",children:[
@@ -455,4 +532,127 @@ function GenerateAiHighlightsDialog(){
 function GenerateAiHighlightsButton(){
   let{showDialog}=useDialog();
   return(0,Q.jsx)(Button$1,{variant:zg.Primary,onClick:()=>{showDialog((0,Q.jsx)(GenerateAiHighlightsDialog,{}))},children:"Highlights Automáticos (IA, até 3 min)"});
+}
+
+function GenerateCinematicHighlightsDialog(){
+  let dispatch=Mu(),match=useCurrentMatch$2(),{settings,updateSettings}=useVideoSettings(),{hideDialog,showDialog}=useDialog(),client=useWebSocketClient(),navigate=useNavigate();
+  let allSteamIds=(0,W.useMemo)(()=>match.players.map(p=>p.steamId),[match.players]);
+  let teamASteamIds=(0,W.useMemo)(()=>match.players.filter(p=>p.teamName===match.teamA.name).map(p=>p.steamId),[match.players,match.teamA.name]);
+  let teamBSteamIds=(0,W.useMemo)(()=>match.players.filter(p=>p.teamName===match.teamB.name).map(p=>p.steamId),[match.players,match.teamB.name]);
+  let[selectedSteamIds,setSelectedSteamIds]=(0,W.useState)(allSteamIds);
+  let[maxDurationSeconds,setMaxDurationSeconds]=(0,W.useState)(180);
+  let[alwaysIncludeWildcardKills,setAlwaysIncludeWildcardKills]=(0,W.useState)(!0);
+  let[enableDroneTransitions,setEnableDroneTransitions]=(0,W.useState)(!0);
+  let[droneHeight,setDroneHeight]=(0,W.useState)(750);
+  let[hudPosition,setHudPosition]=(0,W.useState)(settings.hudPosition??"top-left");
+  let[showIntroScreen,setShowIntroScreen]=(0,W.useState)(settings.showIntroScreen??!0);
+  let[showOutroScreen,setShowOutroScreen]=(0,W.useState)(settings.showOutroScreen??!0);
+  let[showFunAwards,setShowFunAwards]=(0,W.useState)(settings.showFunAwards??!0);
+  let[enableKillCounter,setEnableKillCounter]=(0,W.useState)(settings.enableKillCounter??!0);
+  let[enableSlowMotion,setEnableSlowMotion]=(0,W.useState)(settings.enableSlowMotion??!0);
+  let[enableFastForward,setEnableFastForward]=(0,W.useState)(settings.enableFastForward??!0);
+  let[enableSequenceTransitions,setEnableSequenceTransitions]=(0,W.useState)(settings.enableSequenceTransitions??!0);
+  let[hideGameWindow,setHideGameWindow]=(0,W.useState)(settings.hideGameWindow??!0);
+  let[isStartingRecording,setIsStartingRecording]=(0,W.useState)(!1);
+
+  let durationOptions=[{value:60,label:"Até 1 minuto"},{value:90,label:"Até 1 min 30 s"},{value:120,label:"Até 2 minutos"},{value:180,label:"Até 3 minutos (Recomendado)"}];
+  let hudPositionOptions=[{value:"top-left",label:"Canto Superior Esquerdo (Recomendado)"},{value:"bottom-left",label:"Canto Inferior Esquerdo"},{value:"bottom-right",label:"Canto Inferior Direito"},{value:"top-center",label:"Topo Centralizado"},{value:"top-right",label:"Canto Superior Direito"},{value:"none",label:"Desativado (Sem nome na tela)"}];
+  let droneHeightOptions=[{value:600,label:"Aéreo Baixo (600 unidades)"},{value:750,label:"Aéreo Médio / Padrão (750 unidades - Recomendado)"},{value:950,label:"Aéreo Alto / Panorâmico (950 unidades)"}];
+
+  let result=(0,W.useMemo)(()=>buildAiHighlightsSequences({match,steamIds:selectedSteamIds,maxDurationSeconds,includeIntro:showIntroScreen,includeOutro:showOutroScreen,alwaysIncludeWildcardKills,enableDroneTransitions,droneHeight,settings,firstSequenceNumber:1}),[match,selectedSteamIds,maxDurationSeconds,showIntroScreen,showOutroScreen,alwaysIncludeWildcardKills,enableDroneTransitions,droneHeight,settings]);
+  let formatDur=sec=>{let r=Math.max(0,Math.round(sec)),m=Math.floor(r/60),s=r%60;return`${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`};
+  let applyTimelineOnly=()=>{
+    if(result.sequences.length===0)return;
+    dispatch(Fs({demoFilePath:match.demoFilePath,sequences:result.sequences}));
+    hideDialog();
+  };
+  let recordNow=async()=>{
+    if(result.sequences.length===0||isStartingRecording)return;
+    setIsStartingRecording(!0);
+    await updateSettings({hideGameWindow,hudPosition,showIntroScreen,showOutroScreen,showFunAwards,enableKillCounter,enableSlowMotion,enableFastForward,enableSequenceTransitions,enableDroneTransitions});
+    dispatch(Fs({demoFilePath:match.demoFilePath,sequences:result.sequences}));
+    try{
+      let payload={...settings,concatenateSequences:!0,hideGameWindow,hudPosition,showIntroScreen,showOutroScreen,showFunAwards,enableKillCounter,enableSlowMotion,enableFastForward,enableSequenceTransitions,enableDroneTransitions,checksum:match.checksum,game:match.game,tickrate:match.tickrate,demoPath:match.demoFilePath,mapName:match.mapName,sequences:result.sequences};
+      await client.send({name:Lg.AddVideoToQueue,payload});
+      await client.send({name:Lg.ResumeVideoQueue});
+      hideDialog();
+      await navigate(Nu.Videos);
+    }catch(err){
+      setIsStartingRecording(!1);
+      let msg=getPlaybackErrorMessageFromErrorCode(isErrorCode(err)?err:Sl.UnknownError,match.game);
+      showDialog((0,Q.jsx)(AddVideoToQueueErrorDialog,{children:msg}));
+    }
+  };
+
+  return(0,Q.jsxs)(Dialog$1,{onEnterPressed:applyTimelineOnly,children:[
+    (0,Q.jsx)(DialogHeader,{children:(0,Q.jsx)(DialogTitle,{children:"Highlights Cinemáticos (Drone Aéreo) 🎬"})}),
+    (0,Q.jsx)(DialogContent,{children:(0,Q.jsxs)("div",{className:"flex w-[680px] max-h-[78vh] overflow-y-auto flex-col gap-y-12 pr-4",children:[
+      (0,Q.jsx)("p",{className:"text-caption",children:"Gera automaticamente uma edição cinematográfica dos melhores lances da partida com tomadas aéreas dinâmicas de drone: transição suave descendo do céu até a mira dos jogadores no início de cada clipe, e subindo para voar entre os lances pelo mapa."}),
+      (0,Q.jsxs)("div",{className:"flex flex-col gap-y-8",children:[
+        (0,Q.jsxs)("div",{className:"flex items-center gap-x-8",children:[
+          (0,Q.jsx)("span",{className:"text-body-strong",children:"Jogadores considerados:"}),
+          (0,Q.jsxs)(Button$1,{onClick:()=>setSelectedSteamIds(allSteamIds),children:["Todos (",allSteamIds.length,")"]}),
+          (0,Q.jsx)(Button$1,{onClick:()=>setSelectedSteamIds(teamASteamIds),children:match.teamA.name}),
+          (0,Q.jsx)(Button$1,{onClick:()=>setSelectedSteamIds(teamBSteamIds),children:match.teamB.name})
+        ]}),
+        (0,Q.jsx)(PlayersSelect,{players:match.players,selectedSteamIds,onChange:setSelectedSteamIds})
+      ]}),
+      (0,Q.jsxs)("div",{className:"grid grid-cols-2 gap-12 rounded-4 border border-gray-400 p-8",children:[
+        (0,Q.jsx)(Select$1,{label:"Duração máxima do vídeo (incluindo intro e outro)",options:durationOptions,value:maxDurationSeconds,onChange:setMaxDurationSeconds}),
+        (0,Q.jsx)(Select$1,{label:"Posição do nome (POV: Jogador - Round X)",options:hudPositionOptions,value:hudPosition,onChange:setHudPosition}),
+        (0,Q.jsx)(Select$1,{label:"Altitude da Câmera Drone",options:droneHeightOptions,value:droneHeight,onChange:setDroneHeight}),
+        (0,Q.jsxs)("div",{className:"flex flex-col justify-center",children:[
+          (0,Q.jsx)("span",{className:"text-caption font-bold text-gray-800",children:"🎬 Modo Skycam Drone Ativo"}),
+          (0,Q.jsx)("span",{className:"text-caption text-gray-600",children:"Descida suave de 1.5s do céu até o jogador e subida de 1.25s ao encerrar."})
+        ]})
+      ]}),
+      (0,Q.jsxs)("div",{className:"flex flex-col gap-y-8 rounded-4 border border-gray-400 p-8",children:[
+        (0,Q.jsx)(Checkbox,{label:"Transição aérea de Drone (Skycam: visão do céu até o jogador e voo entre lances)",isChecked:enableDroneTransitions,onChange:e=>setEnableDroneTransitions(e.target.checked)}),
+        (0,Q.jsx)(Checkbox,{label:"Sempre incluir abates coringas (No-Scope, Faca, Zeus, Collat SSG 08 e 1-2 Tiros Seguidos - isentos do limite de tempo)",isChecked:alwaysIncludeWildcardKills,onChange:e=>setAlwaysIncludeWildcardKills(e.target.checked)}),
+        (0,Q.jsx)(Checkbox,{label:"Avanço rápido (2x) em esperas (> 5s) entre abates (exceto SSG 08, Negev, M249 e XM1014)",isChecked:enableFastForward,onChange:e=>setEnableFastForward(e.target.checked)}),
+        (0,Q.jsx)(Checkbox,{label:"Contador de kills animado no HUD (1K, Double, Triple, Ace, Clutches e Armas)",isChecked:enableKillCounter,onChange:e=>setEnableKillCounter(e.target.checked)}),
+        (0,Q.jsx)(Checkbox,{label:"Câmera lenta (Slow Motion 0.5x) em abates épicos (No-Scope, Faca, Wallbang e Clutches)",isChecked:enableSlowMotion,onChange:e=>setEnableSlowMotion(e.target.checked)}),
+        (0,Q.jsx)(Checkbox,{label:"Tela de introdução de 8s (Mapa, Placar Final e KDA dos jogadores)",isChecked:showIntroScreen,onChange:e=>setShowIntroScreen(e.target.checked)}),
+        (0,Q.jsx)(Checkbox,{label:"Tela de encerramento no final do vídeo (MVP e Destaques)",isChecked:showOutroScreen,onChange:e=>setShowOutroScreen(e.target.checked)}),
+        (0,Q.jsx)(Checkbox,{label:"Troféus Engraçados da Partida (Destaque cômico para todos os jogadores: Porta da Esperança, Cearense Lover, Bob Marley, Pikachu, etc.)",isChecked:showFunAwards,onChange:e=>setShowFunAwards(e.target.checked)}),
+        (0,Q.jsx)(Checkbox,{label:"Transição suave (Fade) entre os lances",isChecked:enableSequenceTransitions,onChange:e=>setEnableSequenceTransitions(e.target.checked)}),
+        (0,Q.jsx)(Checkbox,{label:"Gravar com o CS oculto em 2º plano",isChecked:hideGameWindow,onChange:e=>setHideGameWindow(e.target.checked)})
+      ]}),
+      (0,Q.jsxs)("div",{className:"flex flex-col gap-y-4 rounded-4 border border-gray-400 p-8",children:[
+        (0,Q.jsxs)("span",{className:"text-body-strong",children:["Lances cinematográficos (",result.plays.length," de ",result.candidatesCount," candidatos):"]}),
+        result.plays.length===0?(0,Q.jsx)("span",{className:"text-caption",children:"Nenhum lance encontrado para os jogadores selecionados."}):(0,Q.jsx)("div",{className:"flex flex-col gap-y-2 max-h-[260px] overflow-y-auto pr-4",children:result.plays.map((p,i)=>(0,Q.jsxs)("div",{
+          className:"group flex items-center justify-between gap-x-8 text-caption border-b border-gray-300 px-8 py-4 rounded-4 transition-colors duration-75 hover:bg-gray-300 cursor-default",
+          onMouseEnter:e=>{e.currentTarget.style.backgroundColor="var(--gray-300,#dbdbdb)"},
+          onMouseLeave:e=>{e.currentTarget.style.backgroundColor=""},
+          children:[
+            (0,Q.jsxs)("div",{className:"flex items-center gap-x-4 min-w-0 truncate",children:[
+              (0,Q.jsx)("span",{className:"font-medium text-gray-500",children:`${String(i+1).padStart(2,"0")}.`}),
+              (0,Q.jsx)("span",{className:"font-bold text-gray-900",children:`Round ${p.roundNumber}`}),
+              (0,Q.jsx)("span",{className:"text-gray-400",children:"•"}),
+              (0,Q.jsx)("span",{className:"font-bold text-gray-900",children:p.playerName}),
+              (0,Q.jsx)("span",{className:"text-gray-400",children:"•"}),
+              (0,Q.jsx)("span",{className:"text-gray-700",children:p.description}),
+              p.isWildcard?(0,Q.jsx)("span",{className:"font-bold text-gray-900",children:"🃏 [Coringa]"}):null,
+              enableDroneTransitions?(0,Q.jsx)("span",{className:"font-bold text-blue-600",children:"🎬 [Drone]"}):null
+            ]}),
+            (0,Q.jsx)("div",{className:"flex-1 mx-8 border-b border-dotted border-gray-400 opacity-40 group-hover:opacity-80"}),
+            (0,Q.jsxs)("div",{className:"flex items-center gap-x-8 whitespace-nowrap",children:[
+              (0,Q.jsx)("span",{className:"text-gray-500 font-medium",children:`${Math.round(p.seconds + (enableDroneTransitions ? 2.75 : 0))}s`}),
+              (0,Q.jsx)("span",{className:"text-body-strong font-bold px-6 py-2 rounded-4 bg-gray-200 text-gray-900",children:`nota ${p.score}`})
+            ]})
+          ]
+        },`${p.steamId}-${p.startTick}-${i}`))})
+      ]}),
+      (0,Q.jsx)("div",{className:"rounded-4 bg-gray-200 p-12",children:(0,Q.jsxs)("span",{className:"text-body-strong",children:["Duração total estimada: ",formatDur(result.totalSeconds)," de ",formatDur(maxDurationSeconds),result.wildcardPlaysCount>0?` (inclui ${result.wildcardPlaysCount} lance(s) coringa(s) isento(s))`:"" ]})})
+    ]})}),
+    (0,Q.jsxs)(DialogFooter,{children:[
+      (0,Q.jsxs)(Button$1,{variant:zg.Primary,onClick:recordNow,isDisabled:result.sequences.length===0||isStartingRecording,children:["Gerar e Gravar Agora (",result.sequences.length,")"]}),
+      (0,Q.jsx)(Button$1,{onClick:applyTimelineOnly,isDisabled:result.sequences.length===0||isStartingRecording,children:"Apenas Montar Timeline"}),
+      (0,Q.jsx)(CancelButton,{onClick:hideDialog})
+    ]})
+  ]});
+}
+function GenerateCinematicHighlightsButton(){
+  let{showDialog}=useDialog();
+  return(0,Q.jsx)(Button$1,{variant:zg.Primary,onClick:()=>{showDialog((0,Q.jsx)(GenerateCinematicHighlightsDialog,{}))},children:"Highlights Cinemáticos (Drone) 🎬"});
 }
