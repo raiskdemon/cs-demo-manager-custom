@@ -313,8 +313,8 @@ function buildAiHighlightsSequences({match,steamIds,maxDurationSeconds=180,inclu
   let tr=match.tickrate>0?match.tickrate:64;
   let candidates=buildAiHighlightsCandidates({match,steamIds,startSecondsBeforeEvent,endSecondsAfterEvent});
   let introExtra=includeIntro?8:0,outroExtra=includeOutro?5:0;
-  let flyInTicks=Math.round(tr*1.5),flyOutTicks=Math.round(tr*1.25);
-  let dronePerSeqSec=enableDroneTransitions?((flyInTicks+flyOutTicks)/tr):0;
+  let flyInTicks=Math.round(tr*1.5),flyOutTicks=Math.round(tr*1.0),flyAcrossTicks=Math.round(tr*2.0);
+  let dronePerSeqSec=enableDroneTransitions?((flyInTicks+flyOutTicks+flyAcrossTicks)/tr):0;
   let budget=Math.max(10,maxDurationSeconds-introExtra-outroExtra),used=0,chosen=[],perPlayer=new Map(),remaining=[...candidates];
   let wildcardPlaysCount=0;
   let minGapTicks=Math.round(tr*4);
@@ -390,14 +390,28 @@ function buildAiHighlightsSequences({match,steamIds,maxDurationSeconds=180,inclu
 
   let totalChosenSeconds=mergedPlays.reduce((acc,c)=>acc+c.seconds,0)+(enableDroneTransitions?mergedPlays.length*dronePerSeqSec:0);
   let sequences=mergedPlays.map((c,i)=>{
+    let hasNext=i<mergedPlays.length-1;
+    let nextPlay=hasNext?mergedPlays[i+1]:null;
     let droneData=enableDroneTransitions?buildDroneTransitionData(c,tr,droneHeight):null;
+    let nextDroneData=(enableDroneTransitions&&nextPlay)?buildDroneTransitionData(nextPlay,tr,droneHeight):null;
     let actStartTick=c.startTick;
     let actEndTick=c.endTick;
     let seqStartTick=droneData?Math.max(1,actStartTick-flyInTicks):actStartTick;
-    let seqEndTick=droneData?actEndTick+flyOutTicks:actEndTick;
+    let seqEndTick=droneData
+      ?(nextDroneData?actEndTick+flyOutTicks+flyAcrossTicks:actEndTick+flyOutTicks+Math.round(tr*1.0))
+      :actEndTick;
     let playerCameras=droneData
       ?c.playerCameras.map(cam=>({...cam,tick:Math.max(cam.tick,actStartTick)}))
       :c.playerCameras;
+    let droneFlyAcross=(droneData&&nextDroneData)?{
+      startTick:actEndTick+flyOutTicks,
+      endTick:seqEndTick,
+      targetSkyX:nextDroneData.flyIn.skyX,
+      targetSkyY:nextDroneData.flyIn.skyY,
+      targetSkyZ:nextDroneData.flyIn.skyZ,
+      targetYaw:nextDroneData.flyIn.yaw
+    }:void 0;
+
     return {
       number:firstSequenceNumber+i,
       startTick:seqStartTick,
@@ -407,7 +421,8 @@ function buildAiHighlightsSequences({match,steamIds,maxDurationSeconds=180,inclu
       actionStartTick:actStartTick,
       actionEndTick:actEndTick,
       droneFlyIn:droneData?{startTick:seqStartTick,endTick:actStartTick,...droneData.flyIn}:void 0,
-      droneFlyOut:droneData?{startTick:actEndTick,endTick:seqEndTick,...droneData.flyOut}:void 0,
+      droneFlyOut:droneData?{startTick:actEndTick,endTick:actEndTick+flyOutTicks,...droneData.flyOut}:void 0,
+      droneFlyAcross:droneFlyAcross,
       fastForwardIntervals:c.fastForwardIntervals||[],
       showOnlyDeathNotices:settings.showOnlyDeathNotices,
       deathNoticesDuration:settings.deathNoticesDuration,
